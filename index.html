@@ -633,7 +633,10 @@ function renderAttendServiceAdmin(){
       }).join('')}
     </div>`:'<div class="card" style="border:2px solid var(--g)"><div style="text-align:center;color:var(--g);font-weight:700;padding:12px">✓ كل الخدام أغلقوا اليوم</div></div>'}
     <div class="card">
-      <div class="card-title">🙋 الحضور حسب المجموعة</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div class="card-title" style="margin-bottom:0">🙋 الحضور حسب المجموعة</div>
+        <button class="btn bp" style="font-size:11px" onclick="startNewDayForService()">🌅 بدء يوم جديد</button>
+      </div>
       ${servants.map(sv=>{
         let grpMembers=allMembers.filter(m=>m.groupId===sv.groupId);
         let present=grpMembers.filter(m=>DB.todayAtt&&DB.todayAtt[m.code]).length;
@@ -641,13 +644,63 @@ function renderAttendServiceAdmin(){
         return`<div style="margin-bottom:8px">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
             <div style="font-weight:700;font-size:12px">${sv.name} <span class="tag ${closed?'tag-g':'tag-o'}">${closed?'مغلق':'مفتوح'}</span></div>
-            <div style="font-size:11px;color:var(--g);font-weight:700">${present}/${grpMembers.length}</div>
+            <div style="display:flex;align-items:center;gap:6px">
+              <span style="font-size:11px;color:var(--g);font-weight:700">${present}/${grpMembers.length}</span>
+              <button class="btn bw" style="font-size:10px;padding:2px 7px" onclick="viewServantGroup('${sv.groupId}','${sv.name}')">عرض</button>
+            </div>
           </div>
           <div style="background:var(--bd);border-radius:4px;height:6px"><div style="background:var(--g);height:6px;border-radius:4px;width:${grpMembers.length?Math.round(present/grpMembers.length*100):0}%"></div></div>
         </div>`;
       }).join('')}
     </div>
   </div>`;
+}
+
+function startNewDayForService(){
+  let svcId=currentUser.serviceId;
+  let servants=(DB.users||[]).filter(u=>u.role==='servant'&&u.serviceId===svcId);
+  let tkey=todayKey();
+  let openGroups=servants.filter(sv=>!DB.closedGroups||DB.closedGroups[sv.groupId]!==tkey);
+  let msg=openGroups.length
+    ?'تحذير: '+openGroups.length+' مجموعة لم تُغلق بعد. بدء يوم جديد سيمسح تسجيلاتهم بدون تسجيل غياب. هل أنت متأكد؟'
+    :'سيتم تصفير شاشات كل خدام الخدمة وفتح تسجيل جديد.';
+  showModal('🌅 بدء يوم جديد',msg,'نعم، ابدأ',async()=>{
+    let svcMembers=(DB.members||[]).filter(m=>m.serviceId===svcId);
+    let localTodayAtt=JSON.parse(JSON.stringify(DB.todayAtt||{}));
+    svcMembers.forEach(m=>delete localTodayAtt[m.code]);
+    let newClosedGroups=Object.assign({},DB.closedGroups||{});
+    servants.forEach(sv=>delete newClosedGroups[sv.groupId]);
+    DB.closedGroups=newClosedGroups;
+    _localAtt={};
+    logActivity('بدء يوم جديد لخدمة: '+getServiceName(svcId));
+    await saveDB({skipAttMerge:true,localTodayAtt,closedGroupsAdd:{}});
+    // نعيد كتابة closedGroups بالكامل بدون مجموعات الخدمة دي
+    DB.closedGroups=newClosedGroups;
+    await saveDB({skipArrMerge:false});
+    renderAttendPage();
+  });
+}
+
+function viewServantGroup(groupId, servantName){
+  let svcId=currentUser.serviceId;
+  let grpMembers=(DB.members||[]).filter(m=>m.groupId===groupId&&m.serviceId===svcId);
+  let tkey=todayKey();
+  document.getElementById('memberModalBox').innerHTML=`
+    <div class="modal-title">🙋 مجموعة ${servantName}</div>
+    <div style="margin-bottom:10px">
+      ${grpMembers.map(m=>{
+        let present=DB.todayAtt&&DB.todayAtt[m.code];
+        return`<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;border-radius:7px;margin-bottom:5px;background:${present?'var(--gl)':'var(--bg)'}">
+          <div>
+            <div style="font-weight:700;font-size:12px">${m.name}</div>
+            <div style="font-size:10px;color:var(--txm)">${m.code} · ${m.grade||''}</div>
+          </div>
+          <span class="tag ${present?'tag-g':'tag-r'}">${present?'حاضر — '+present.time:'لم يُسجَّل'}</span>
+        </div>`;
+      }).join('')}
+    </div>
+    <button class="btn bw" style="width:100%;justify-content:center" onclick="closeModal()">إغلاق</button>`;
+  document.getElementById('memberModal').classList.add('on');
 }
 
 async function closeDayForServant(groupId, servantName){
@@ -835,6 +888,8 @@ async function deleteMember(code,name){
 
 function openAddMember(){
   let services=isSuperAdmin()?DB.services:[DB.services.find(s=>s.id===currentUser.serviceId)].filter(Boolean);
+  let isServantUser=isServant();
+  let myServants=isServantUser?[]:(DB.users||[]).filter(u=>u.role==='servant'&&(!currentUser.serviceId||u.serviceId===currentUser.serviceId));
   document.getElementById('memberModalBox').innerHTML=`
     <div class="modal-title">➕ إضافة عضو جديد</div>
     <div class="form-grid">
@@ -846,9 +901,21 @@ function openAddMember(){
         <option value="">— اختر —</option>
         ${['الأولى إعدادي','الثانية إعدادي','الثالثة إعدادي','الأولى ثانوي','الثانية ثانوي','الثالثة ثانوي','الأولى جامعة','الثانية جامعة','الثالثة جامعة','الرابعة جامعة','تخرج'].map(g=>`<option>${g}</option>`).join('')}
       </select></div>
+      <div class="field"><label>أب الاعتراف</label><input id="am_father" placeholder="اسم أب الاعتراف"></div>
+    </div>
+    <div class="form-grid">
+      <div class="field"><label>العنوان</label><input id="am_addr" placeholder="العنوان"></div>
+      <div class="field"><label>تاريخ الميلاد</label><input type="date" id="am_dob"></div>
+    </div>
+    <div class="field"><label>ملاحظات</label><input id="am_notes" placeholder="ملاحظات اختيارية"></div>
+    ${!isServantUser?`<div class="form-grid">
       <div class="field"><label>الخدمة</label><select id="am_service">
         <option value="">— اختر —</option>
         ${services.map(s=>`<option value="${s.id}">${s.name}</option>`).join('')}
+      </select></div>
+      <div class="field"><label>الخادم المسئول</label><select id="am_servant">
+        <option value="">— اختر —</option>
+        ${myServants.map(u=>`<option value="${u.id}">${u.name}</option>`).join('')}
       </select></div>
     </div>
     <div id="am_theatre_extra" style="display:none">
@@ -856,32 +923,31 @@ function openAddMember(){
         <div class="field"><label>الفئة</label><select id="am_category"><option value="">— اختر —</option></select></div>
         <div class="field"><label>القسم</label><select id="am_section"><option value="">— اختر —</option></select></div>
       </div>
-    </div>
-    <div class="field"><label>الخادم المسئول</label><select id="am_servant">
-      <option value="">— اختر —</option>
-      ${(DB.users||[]).filter(u=>u.role==='servant').map(u=>`<option value="${u.id}">${u.name} (${getServiceName(u.serviceId)})</option>`).join('')}
-    </select></div>
+    </div>`:'<div id="am_theatre_extra" style="display:none"><div class="form-grid"><div class="field"><label>الفئة</label><select id="am_category"><option value="">— اختر —</option></select></div><div class="field"><label>القسم</label><select id="am_section"><option value="">— اختر —</option></select></div></div></div>'}
     <div id="am_err" style="color:var(--r);font-size:11px;margin-bottom:8px"></div>
     <div class="modal-btns">
       <button class="btn bp" onclick="confirmAddMember()">✓ حفظ</button>
       <button class="btn bw" onclick="closeModal()">إلغاء</button>
     </div>`;
-  document.getElementById('am_service').onchange=function(){
-    let svc=(DB.services||[]).find(s=>s.id===this.value);
-    let extra=document.getElementById('am_theatre_extra');
-    if(svc&&svc.type==='theatre'){
-      extra.style.display='';
-      document.getElementById('am_category').innerHTML='<option value="">— اختر —</option>'+(svc.categories||[]).map(c=>`<option>${c}</option>`).join('');
-      document.getElementById('am_section').innerHTML='<option value="">— اختر —</option>'+(svc.sections||[]).map(c=>`<option>${c}</option>`).join('');
-    }else{extra.style.display='none';}
-    // فلتر الخدام حسب الخدمة المختارة
-    let servantSel=document.getElementById('am_servant');
-    let servants=(DB.users||[]).filter(u=>u.role==='servant'&&(!this.value||u.serviceId===this.value));
-    servantSel.innerHTML='<option value="">— اختر —</option>'+servants.map(u=>`<option value="${u.id}">${u.name}</option>`).join('');
-  };
-  if(!isSuperAdmin()&&currentUser.serviceId){
-    document.getElementById('am_service').value=currentUser.serviceId;
-    document.getElementById('am_service').dispatchEvent(new Event('change'));
+  if(!isServantUser){
+    let svcSel=document.getElementById('am_service');
+    if(svcSel) svcSel.onchange=function(){
+      let svc=(DB.services||[]).find(s=>s.id===this.value);
+      let extra=document.getElementById('am_theatre_extra');
+      if(svc&&svc.type==='theatre'){
+        extra.style.display='';
+        document.getElementById('am_category').innerHTML='<option value="">— اختر —</option>'+(svc.categories||[]).map(c=>`<option>${c}</option>`).join('');
+        document.getElementById('am_section').innerHTML='<option value="">— اختر —</option>'+(svc.sections||[]).map(c=>`<option>${c}</option>`).join('');
+      }else{extra.style.display='none';}
+      let servantSel=document.getElementById('am_servant');
+      if(servantSel){
+        let servants=(DB.users||[]).filter(u=>u.role==='servant'&&(!this.value||u.serviceId===this.value));
+        servantSel.innerHTML='<option value="">— اختر —</option>'+servants.map(u=>`<option value="${u.id}">${u.name}</option>`).join('');
+      }
+    };
+    if(currentUser.serviceId){
+      if(svcSel){svcSel.value=currentUser.serviceId;svcSel.dispatchEvent(new Event('change'));}
+    }
   }
   document.getElementById('memberModal').classList.add('on');
 }
@@ -890,13 +956,18 @@ async function confirmAddMember(){
   let name=getVal('am_name').trim();
   let err=document.getElementById('am_err');
   if(!name){err.textContent='الاسم مطلوب';return;}
-  let servantId=getVal('am_servant');
-  let servant=(DB.users||[]).find(u=>u.id===servantId);
+  let servantId=isServant()?currentUser.id:getVal('am_servant');
+  let servant=(DB.users||[]).find(u=>u.id===servantId)||(isServant()?currentUser:null);
+  let svcId=isServant()?currentUser.serviceId:(getVal('am_service')||currentUser.serviceId||'');
   let m={
     code:nextCode(),name,
     phone:getVal('am_phone').trim(),
     grade:getVal('am_grade'),
-    serviceId:getVal('am_service')||currentUser.serviceId||'',
+    father:getVal('am_father').trim(),
+    addr:getVal('am_addr').trim(),
+    dob:getVal('am_dob'),
+    notes:getVal('am_notes').trim(),
+    serviceId:svcId,
     categoryId:getVal('am_category')||'',
     sectionId:getVal('am_section')||'',
     groupId:servant?servant.groupId:'',
@@ -1149,6 +1220,7 @@ function renderReportsPage(){
   let tabs=[
     {id:'rpt_today',label:'اليوم'},
     {id:'rpt_monthly',label:'الشهر'},
+    {id:'rpt_alerts',label:'⚠️ تنبيهات الغياب'},
   ];
   if(isServiceAdmin()||isSuperAdmin()) tabs.push({id:'rpt_fix',label:'🔧 تصحيح سجل'});
   area.innerHTML=`<div class="page">
@@ -1167,6 +1239,7 @@ function switchRptTab(id){
   let c=document.getElementById('rptContent');if(!c)return;
   if(id==='rpt_today') renderRptToday(c);
   else if(id==='rpt_monthly') renderRptMonthly(c);
+  else if(id==='rpt_alerts') renderRptAlerts(c);
   else if(id==='rpt_fix') renderRptFix(c);
 }
 
@@ -1216,6 +1289,62 @@ function renderRptMonthly(container){
   </div>`;
 }
 
+function renderRptAlerts(container){
+  let myMembers=getMyMembers();
+  let thresh=3; // حد الغياب المتتالي
+
+  // بناء خريطة السجلات لكل عضو مرتبة من الأحدث للأقدم
+  let recMap={};
+  (DB.records||[]).forEach(r=>{
+    if(!recMap[r.code])recMap[r.code]=[];
+    recMap[r.code].push(r);
+  });
+  Object.keys(recMap).forEach(code=>{
+    recMap[code].sort((a,b)=>b.date.localeCompare(a.date));
+  });
+
+  // حساب الغياب المتتالي لكل عضو
+  let alerts=[];
+  myMembers.forEach(m=>{
+    let recs=recMap[m.code]||[];
+    let count=0,lastPresent='';
+    for(let r of recs){
+      if(r.status==='غائب') count++;
+      else{lastPresent=r.date;break;}
+    }
+    if(count>=thresh){
+      alerts.push({m,count,lastPresent,phone:m.phone||''});
+    }
+  });
+  alerts.sort((a,b)=>b.count-a.count);
+
+  container.innerHTML=`<div class="card">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <div class="card-title" style="margin-bottom:0">⚠️ تنبيهات الغياب المتتالي</div>
+      <div style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--txm)">
+        الحد:
+        <select onchange="document.getElementById('alertThresh').textContent=this.value;renderRptAlerts(document.getElementById('rptContent'))" style="padding:3px 6px;border:1px solid var(--bd);border-radius:5px;font-size:11px">
+          ${[2,3,4,5,6].map(n=>`<option value="${n}"${n===thresh?' selected':''}>${n} مرات</option>`).join('')}
+        </select>
+      </div>
+    </div>
+    ${alerts.length?`
+    <div style="margin-bottom:8px;font-size:11px;color:var(--r);font-weight:700">${alerts.length} عضو غائب ${thresh}+ مرات متتالية</div>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th>#</th><th>الاسم</th><th>الكود</th><th>غياب متتالي</th><th>آخر حضور</th><th>تواصل</th></tr></thead>
+      <tbody>${alerts.map((a,i)=>`<tr>
+        <td style="color:var(--txm)">${i+1}</td>
+        <td style="font-weight:700">${a.m.name}</td>
+        <td><span class="tag tag-p">${a.m.code}</span></td>
+        <td><span class="tag tag-r">${a.count} مرة</span></td>
+        <td style="color:var(--txm);font-size:11px">${a.lastPresent||'لم يحضر من قبل'}</td>
+        <td>${a.phone?`<a href="https://wa.me/2${a.phone.replace(/^0/,'')}" target="_blank" class="btn bg" style="font-size:10px;padding:3px 8px;text-decoration:none">واتساب</a>`:'—'}</td>
+      </tr>`).join('')}</tbody>
+    </table></div>`
+    :'<div style="text-align:center;color:var(--g);font-weight:700;padding:20px">✓ لا يوجد غياب متتالي يتجاوز '+thresh+' مرات</div>'}
+  </div>`;
+}
+
 function renderRptFix(container){
   let myMembers=getMyMembers();
   let days=[...new Set((DB.records||[]).filter(r=>myMembers.find(m=>m.code===r.code)).map(r=>r.date))].sort().reverse().slice(0,30);
@@ -1243,17 +1372,23 @@ async function fixRecord(){
   let rec=(DB.records||[]).find(r=>r.code===code&&r.date===date);
   let member=(DB.members||[]).find(m=>m.code===code);
   if(!rec){res.innerHTML='<div class="status-bar err">لا يوجد سجل لهذا العضو في هذا التاريخ</div>';return;}
-  res.innerHTML=`<div class="status-bar ${rec.status==='حاضر'?'ok':'err'}">
-    السجل الحالي: <strong>${rec.status}</strong> — ${rec.time||'—'}
-    <br><br>
-    <button class="btn ${rec.status==='حاضر'?'br':'bg'}" onclick="(async()=>{
-      let r=(DB.records||[]).find(x=>x.code==='${code}'&&x.date==='${date}');
-      if(r){r.status=r.status==='حاضر'?'غائب':'حاضر';r.time=r.status==='حاضر'?nowT():'—';r.fixedBy='${currentUser?currentUser.name:''}';}
-      logActivity('تصحيح سجل: ${member?member.name:code} — ${date} — حالة جديدة: '+r.status);
-      await saveDB({recordsPatch:{upsert:[r]}});
-      fixRecord();
-    })()">تغيير لـ ${rec.status==='حاضر'?'غائب':'حاضر'}</button>
-  </div>`;
+  let isPresent=rec.status==='حاضر';
+  let newStatus=isPresent?'غائب':'حاضر';
+  res.innerHTML='<div class="status-bar '+(isPresent?'ok':'err')+'">'
+    +'السجل الحالي: <strong>'+rec.status+'</strong> — '+(rec.time||'—')+'<br><br>'
+    +'<button class="btn '+(isPresent?'br':'bg')+'" id="fixBtn">تغيير لـ '+newStatus+'</button>'
+    +'</div>';
+  document.getElementById('fixBtn').onclick=async()=>{
+    let r=(DB.records||[]).find(x=>x.code===code&&x.date===date);
+    if(r){
+      r.status=newStatus;
+      r.time=newStatus==='حاضر'?nowT():'—';
+      r.fixedBy=currentUser?currentUser.name:'';
+    }
+    logActivity('تصحيح سجل: '+(member?member.name:code)+' — '+date+' — حالة جديدة: '+newStatus);
+    await saveDB({recordsPatch:{upsert:[r]}});
+    fixRecord();
+  };
 }
 
 // ===== SETTINGS PAGE =====
