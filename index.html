@@ -201,6 +201,7 @@ tr:hover td{background:#fafafa;}
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script>
 'use strict';
 
@@ -881,7 +882,10 @@ function renderMembersPage(){
     <div class="card">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
         <div class="card-title" style="margin-bottom:0">👥 الأعضاء (${members.length})</div>
-        ${canAdd?`<button class="btn bp" onclick="openAddMember()" style="font-size:11px">+ إضافة</button>`:''}
+        ${canAdd?`<div style="display:flex;gap:6px">
+          <button class="btn bp" onclick="openAddMember()" style="font-size:11px">+ إضافة</button>
+          <label class="btn bw" style="cursor:pointer;font-size:11px">📥 استيراد CSV<input type="file" accept=".csv,.xlsx,.xls" style="display:none" onchange="importMembersCSV(this)"></label>
+        </div>`:''}
       </div>
       <div class="field" style="margin-bottom:8px">
         <input id="memberSearch" placeholder="🔍 بحث بالاسم أو الكود..." oninput="filterMembers()" style="width:100%;padding:7px 10px;border:1.5px solid var(--bd);border-radius:7px;font-size:12px;outline:none">
@@ -1638,6 +1642,115 @@ async function fixRecord(){
     await saveDB({recordsPatch:{upsert:[r]}});
     fixRecord();
   };
+}
+
+
+// ===== استيراد CSV =====
+function importMembersCSV(input){
+  let f=input.files[0];if(!f)return;
+  let ext=f.name.split('.').pop().toLowerCase();
+  if(ext==='csv'){
+    let r=new FileReader();
+    r.onload=e=>parseImportCSV(e.target.result);
+    r.readAsText(f,'UTF-8');
+  } else {
+    let r=new FileReader();
+    r.onload=e=>{
+      try{
+        let data=new Uint8Array(e.target.result);
+        let wb=XLSX.read(data,{type:'array'});
+        let ws=wb.Sheets[wb.SheetNames[0]];
+        let csv=XLSX.utils.sheet_to_csv(ws);
+        parseImportCSV(csv);
+      }catch(err){
+        showModal('خطأ','تعذّر قراءة الملف — جرّب حفظه كـ CSV أولاً','حسناً',null);
+      }
+    };
+    r.readAsArrayBuffer(f);
+  }
+  input.value='';
+}
+
+function parseImportCSV(text){
+  let sep=text.includes('\t')?'\t':',';
+  let lines=text.replace(/\r/g,'').split('\n').filter(l=>l.trim());
+  if(lines.length<2){showModal('خطأ','الملف فارغ أو ليس له رأس','حسناً',null);return;}
+  let headers=lines[0].split(sep).map(h=>h.trim().replace(/^"|"$/g,'').toLowerCase());
+  let colIdx=(names)=>{for(let n of names){let i=headers.indexOf(n);if(i>=0)return i;}return -1;};
+  let ci={
+    name:colIdx(['name','الاسم']),
+    phone:colIdx(['phone','تليفون','التليفون']),
+    grade:colIdx(['grade','السنة','سنة']),
+    father:colIdx(['father','اب الاعتراف','أب الاعتراف']),
+    addr:colIdx(['addr','address','العنوان']),
+    dob:colIdx(['dob','تاريخ الميلاد']),
+    notes:colIdx(['notes','ملاحظات']),
+    servantName:colIdx(['servantname','servant','الخادم','اسم الخادم']),
+    sectionName:colIdx(['sectionname','section','القسم']),
+    categoryName:colIdx(['categoryname','category','الفئة']),
+  };
+  if(ci.name<0){showModal('خطأ','عمود "name" أو "الاسم" غير موجود','حسناً',null);return;}
+
+  let svcId=currentUser.serviceId||'';
+  let svc=(DB.services||[]).find(s=>s.id===svcId)||null;
+  let isTheatreSvc=svc?svc.type==='theatre':(currentUser.sectionId||currentUser.categoryId)?true:false;
+  let valid=[],rejected=[];
+
+  lines.slice(1).map(l=>l.split(sep).map(c=>c.trim().replace(/^"|"$/g,''))).filter(r=>r[ci.name]&&r[ci.name].trim()).forEach(row=>{
+    let get=(i)=>i>=0?row[i]||'':'';
+    let name=get(ci.name).trim();if(!name)return;
+    let servant=null;
+    let servantRaw=get(ci.servantName).trim();
+    if(isServant()){servant=currentUser;}
+    else if(servantRaw){
+      servant=(DB.users||[]).find(u=>u.role==='servant'&&u.name.trim().replace(/\s+/g,' ')===servantRaw.replace(/\s+/g,' ')&&(!svcId||u.serviceId===svcId));
+      if(!servant){rejected.push({name,reason:'الخادم "'+servantRaw+'" غير موجود'});return;}
+    }
+    let sectionId=currentUser.sectionId||'';
+    let categoryId=currentUser.categoryId||'';
+    if(isTheatreSvc){
+      let sectionRaw=get(ci.sectionName).trim();
+      let categoryRaw=get(ci.categoryName).trim();
+      if(servant){sectionId=servant.sectionId||sectionId;categoryId=servant.categoryId||categoryId;}
+      if(sectionRaw)sectionId=sectionRaw;
+      if(categoryRaw)categoryId=categoryRaw;
+    }
+    valid.push({name,phone:get(ci.phone),grade:get(ci.grade),father:get(ci.father),addr:get(ci.addr),dob:get(ci.dob),notes:get(ci.notes),
+      serviceId:servant?servant.serviceId:svcId,groupId:servant?servant.groupId:'',sectionId,categoryId,_sd:servant?servant.name:'—'});
+  });
+
+  if(!valid.length&&!rejected.length){showModal('خطأ','لا توجد بيانات صالحة','حسناً',null);return;}
+
+  let tbl=`<div class="tbl-wrap" style="max-height:180px;margin-bottom:10px"><table>
+    <thead><tr><th>الاسم</th><th>السنة</th><th>الخادم</th></tr></thead>
+    <tbody>${valid.slice(0,5).map(m=>`<tr><td style="font-weight:700">${m.name}</td><td>${m.grade||'—'}</td><td>${m._sd}</td></tr>`).join('')}
+    ${valid.length>5?`<tr><td colspan="3" style="text-align:center;color:var(--txm)">... و ${valid.length-5} آخرين</td></tr>`:''}
+    </tbody></table></div>`;
+
+  if(rejected.length)tbl+=`<div class="status-bar err" style="margin-bottom:8px">⚠ رُفض ${rejected.length}:<br>${rejected.slice(0,3).map(r=>'• '+r.name+' — '+r.reason).join('<br>')}</div>`;
+
+  document.getElementById('memberModalBox').innerHTML=`
+    <div class="modal-title">📥 استيراد CSV — معاينة</div>
+    <div style="font-size:12px;color:var(--txm);margin-bottom:8px">${valid.length} عضو جاهز</div>
+    ${tbl}
+    <div id="_importData" style="display:none">${encodeURIComponent(JSON.stringify(valid))}</div>
+    <div class="modal-btns">
+      <button class="btn bp" onclick="confirmImportMembers()">✓ استيراد ${valid.length} عضو</button>
+      <button class="btn bw" onclick="closeModal()">إلغاء</button>
+    </div>`;
+  document.getElementById('memberModal').classList.add('on');
+}
+
+async function confirmImportMembers(){
+  let el=document.getElementById('_importData');
+  if(!el)return;
+  let valid=JSON.parse(decodeURIComponent(el.textContent));
+  let added=valid.map(m=>{let nm={code:nextCode(),...m};delete nm._sd;return nm;});
+  added.forEach(m=>DB.members.push(m));
+  logActivity('استيراد CSV: '+added.length+' عضو');
+  await saveDB({membersPatch:{upsert:added}});
+  closeModal();
+  showModal('تم','تم استيراد '+added.length+' عضو بنجاح','حسناً',()=>renderMembersPage(),'ok');
 }
 
 // ===== SETTINGS PAGE =====
