@@ -1042,27 +1042,91 @@ async function confirmAddMember(){
 function editMember(code){
   let m=(DB.members||[]).find(x=>x.code===code);
   if(!m)return;
+  let r=currentUser.role;
+  let canChangeServant=isSuperAdmin()||isServiceAdmin()||isYearAdmin()||r==='section_admin'||r==='category_admin';
+  let svcId=isSuperAdmin()?m.serviceId:currentUser.serviceId;
+  let svc=(DB.services||[]).find(s=>s.id===svcId);
+  let isTheatreSvc=svc&&svc.type==='theatre';
+
+  // قائمة الخدام المتاحين حسب الصلاحية
+  let availableServants=[];
+  if(canChangeServant){
+    availableServants=(DB.users||[]).filter(u=>{
+      if(u.role!=='servant'&&u.role!=='theatre_servant')return false;
+      if(!isSuperAdmin()&&u.serviceId!==currentUser.serviceId)return false;
+      if(r==='section_admin'&&u.sectionId!==currentUser.sectionId)return false;
+      if(r==='category_admin'&&u.categoryId!==currentUser.categoryId)return false;
+      if(r==='year_admin'){
+        let myM=getMyMembers();
+        let grps=new Set(myM.map(x=>x.groupId).filter(Boolean));
+        return grps.has(u.groupId);
+      }
+      return true;
+    });
+  }
+  let currentServant=availableServants.find(u=>u.groupId===m.groupId);
+
   document.getElementById('memberModalBox').innerHTML=`
-    <div class="modal-title">✎ تعديل: ${m.name}</div>
+    <div class="modal-title">✎ تعديل: ${m.name} <span class="tag tag-p">${m.code}</span></div>
     <div class="form-grid">
-      <div class="field"><label>الاسم</label><input id="em_name" value="${m.name}"></div>
+      <div class="field"><label>الاسم</label><input id="em_name" value="${m.name||''}"></div>
       <div class="field"><label>التليفون</label><input id="em_phone" value="${m.phone||''}"></div>
     </div>
-    <div class="field"><label>السنة الدراسية</label><select id="em_grade">
-      ${['الأولى إعدادي','الثانية إعدادي','الثالثة إعدادي','الأولى ثانوي','الثانية ثانوي','الثالثة ثانوي','الأولى جامعة','الثانية جامعة','الثالثة جامعة','الرابعة جامعة','تخرج'].map(g=>`<option${m.grade===g?' selected':''}>${g}</option>`).join('')}
-    </select></div>
+    <div class="form-grid">
+      <div class="field"><label>السنة الدراسية</label><select id="em_grade">
+        <option value="">— اختر —</option>
+        ${['الأولى إعدادي','الثانية إعدادي','الثالثة إعدادي','الأولى ثانوي','الثانية ثانوي','الثالثة ثانوي','الأولى جامعة','الثانية جامعة','الثالثة جامعة','الرابعة جامعة','تخرج'].map(g=>`<option${m.grade===g?' selected':''}>${g}</option>`).join('')}
+      </select></div>
+      <div class="field"><label>أب الاعتراف</label><input id="em_father" value="${m.father||''}"></div>
+    </div>
+    <div class="form-grid">
+      <div class="field"><label>العنوان</label><input id="em_addr" value="${m.addr||''}"></div>
+      <div class="field"><label>تاريخ الميلاد</label><input type="date" id="em_dob" value="${m.dob||''}"></div>
+    </div>
+    <div class="field"><label>ملاحظات</label><input id="em_notes" value="${m.notes||''}"></div>
+    ${canChangeServant&&availableServants.length?`
+    <div class="field"><label>الخادم المسئول</label><select id="em_servant">
+      <option value="">— بدون خادم محدد —</option>
+      ${availableServants.map(u=>`<option value="${u.id}"${currentServant&&currentServant.id===u.id?' selected':''}>${u.name}</option>`).join('')}
+    </select></div>`:''}
+    ${isTheatreSvc?`
+    <div class="form-grid">
+      <div class="field"><label>الفئة</label><select id="em_category">
+        <option value="">— اختر —</option>
+        ${(svc.categories||[]).map(c=>`<option${m.categoryId===c?' selected':''}>${c}</option>`).join('')}
+      </select></div>
+      <div class="field"><label>القسم</label><select id="em_section">
+        <option value="">— اختر —</option>
+        ${(svc.sections||[]).map(c=>`<option${m.sectionId===c?' selected':''}>${c}</option>`).join('')}
+      </select></div>
+    </div>`:''}
     <div class="modal-btns">
-      <button class="btn bp" onclick="(async()=>{
-        let upd=Object.assign({},DB.members.find(x=>x.code==='${code}')||{});
-        upd.name=getVal('em_name');upd.phone=getVal('em_phone');upd.grade=getVal('em_grade');
-        let idx=DB.members.findIndex(x=>x.code==='${code}');
-        if(idx>=0)DB.members[idx]=upd;
-        logActivity('تعديل عضو: '+upd.name);
-        await saveDB({membersPatch:{upsert:[upd]}});
-        closeModal();renderMembersPage();
-      })()">✓ حفظ</button>
+      <button class="btn bp" id="em_save">✓ حفظ</button>
       <button class="btn bw" onclick="closeModal()">إلغاء</button>
     </div>`;
+
+  document.getElementById('em_save').onclick=async()=>{
+    let upd=Object.assign({},DB.members.find(x=>x.code===code)||{});
+    upd.name=getVal('em_name');
+    upd.phone=getVal('em_phone');
+    upd.grade=getVal('em_grade');
+    upd.father=getVal('em_father');
+    upd.addr=getVal('em_addr');
+    upd.dob=getVal('em_dob');
+    upd.notes=getVal('em_notes');
+    if(isTheatreSvc){upd.categoryId=getVal('em_category');upd.sectionId=getVal('em_section');}
+    let servantSel=document.getElementById('em_servant');
+    if(servantSel){
+      let sv=(DB.users||[]).find(u=>u.id===servantSel.value);
+      if(sv){upd.groupId=sv.groupId;upd.serviceId=sv.serviceId;}
+      else if(!servantSel.value){upd.groupId='';}
+    }
+    let idx=DB.members.findIndex(x=>x.code===code);
+    if(idx>=0)DB.members[idx]=upd;
+    logActivity('تعديل عضو: '+upd.name+' ('+code+')');
+    await saveDB({membersPatch:{upsert:[upd]}});
+    closeModal();renderMembersPage();
+  };
   document.getElementById('memberModal').classList.add('on');
 }
 
