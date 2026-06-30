@@ -1,0 +1,2014 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>نظام الحضور الموحد</title>
+<style>
+:root{
+  --p:#1a56db;--pl:#e8f0fe;--g:#0e9f6e;--gl:#d5f5e3;--r:#e02424;--rl:#fde8e8;
+  --o:#ff8c00;--ol:#fff3e0;--tx:#111827;--txm:#6b7280;--bd:#e5e7eb;
+  --bg:#f9fafb;--white:#fff;--sh:0 1px 3px rgba(0,0,0,.1);
+}
+*{box-sizing:border-box;margin:0;padding:0;font-family:'Segoe UI',Tahoma,Arial,sans-serif;}
+body{background:var(--bg);color:var(--tx);font-size:13px;min-height:100vh;}
+
+/* ===== LOADING ===== */
+#loadingOverlay{position:fixed;inset:0;background:var(--p);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;color:#fff;}
+#loadingOverlay .spin{width:40px;height:40px;border:4px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .8s linear infinite;margin-bottom:16px;}
+@keyframes spin{to{transform:rotate(360deg)}}
+.hidden{display:none!important;}
+
+/* ===== LOGIN ===== */
+.login-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,var(--p) 0%,#1e40af 100%);padding:16px;}
+.login-box{background:#fff;border-radius:16px;padding:32px 28px;width:100%;max-width:380px;box-shadow:0 20px 60px rgba(0,0,0,.2);}
+.login-logo{text-align:center;font-size:40px;margin-bottom:8px;}
+.login-title{text-align:center;font-size:20px;font-weight:800;color:var(--p);margin-bottom:4px;}
+.login-sub{text-align:center;font-size:12px;color:var(--txm);margin-bottom:24px;}
+.lfield{margin-bottom:14px;}
+.lfield label{display:block;font-size:11px;font-weight:700;color:var(--txm);margin-bottom:5px;}
+.lfield input{width:100%;padding:10px 12px;border:1.5px solid var(--bd);border-radius:8px;font-size:14px;outline:none;transition:border-color .2s;}
+.lfield input:focus{border-color:var(--p);}
+.lerr{background:var(--rl);color:var(--r);padding:8px 12px;border-radius:7px;font-size:12px;font-weight:700;margin-bottom:10px;display:none;align-items:center;gap:5px;}
+
+/* ===== TOPBAR ===== */
+.topbar{background:var(--p);color:#fff;padding:0 12px;height:48px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;box-shadow:var(--sh);}
+.topbar-left{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;}
+.topbar-right{display:flex;align-items:center;gap:6px;}
+.role-chip{padding:3px 9px;border-radius:20px;font-size:10px;font-weight:700;}
+.chip-superadmin{background:#7c3aed;color:#fff;}
+.chip-viewer{background:#0891b2;color:#fff;}
+.chip-service_admin{background:#059669;color:#fff;}
+.chip-section_admin,.chip-category_admin{background:#d97706;color:#fff;}
+.chip-servant{background:#6b7280;color:#fff;}
+.logout-btn{background:rgba(255,255,255,.15);border:none;color:#fff;padding:5px 10px;border-radius:6px;font-size:11px;cursor:pointer;font-weight:700;}
+.logout-btn:hover{background:rgba(255,255,255,.25);}
+.service-chip{background:rgba(255,255,255,.2);padding:3px 9px;border-radius:12px;font-size:11px;font-weight:700;}
+
+/* ===== TABS ===== */
+.tabs-bar{display:flex;background:#fff;border-bottom:2px solid var(--bd);overflow-x:auto;scrollbar-width:none;position:sticky;top:48px;z-index:99;}
+.tabs-bar::-webkit-scrollbar{display:none;}
+.tabs-bar button{padding:10px 14px;border:none;background:none;font-size:12px;font-weight:700;color:var(--txm);cursor:pointer;white-space:nowrap;border-bottom:2px solid transparent;margin-bottom:-2px;}
+.tabs-bar button.on{color:var(--p);border-bottom-color:var(--p);}
+
+/* ===== PAGES ===== */
+.page{padding:12px;max-width:800px;margin:0 auto;}
+.card{background:#fff;border-radius:10px;padding:14px;box-shadow:var(--sh);margin-bottom:12px;}
+.card-title{font-size:13px;font-weight:800;color:var(--p);margin-bottom:10px;display:flex;align-items:center;gap:6px;}
+.section-sep{border:none;border-top:1px solid var(--bd);margin:12px 0;}
+
+/* ===== BUTTONS ===== */
+.btn{display:inline-flex;align-items:center;gap:5px;padding:7px 13px;border-radius:7px;border:none;font-size:12px;font-weight:700;cursor:pointer;}
+.bp{background:var(--p);color:#fff;} .bp:hover{background:#1648c0;}
+.bg{background:var(--g);color:#fff;} .bg:hover{background:#0b8060;}
+.br{background:var(--r);color:#fff;} .br:hover{background:#c81e1e;}
+.bo{background:var(--o);color:#fff;}
+.bgr{background:var(--rl);color:var(--r);}
+.bw{background:var(--bd);color:var(--tx);}
+
+/* ===== FORMS ===== */
+.field{margin-bottom:10px;}
+.field label{display:block;font-size:11px;font-weight:700;color:var(--txm);margin-bottom:4px;}
+.field input,.field select,.field textarea{width:100%;padding:8px 10px;border:1.5px solid var(--bd);border-radius:7px;font-size:12px;outline:none;}
+.field input:focus,.field select:focus{border-color:var(--p);}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+@media(max-width:480px){.form-grid{grid-template-columns:1fr;}}
+
+/* ===== TABLES ===== */
+.tbl-wrap{overflow-x:auto;border-radius:8px;border:1px solid var(--bd);}
+table{width:100%;border-collapse:collapse;font-size:12px;}
+th{background:var(--pl);color:var(--p);font-weight:700;padding:8px 10px;text-align:right;}
+td{padding:7px 10px;border-top:1px solid var(--bd);vertical-align:middle;}
+tr:hover td{background:#fafafa;}
+
+/* ===== STATUS ===== */
+.status-bar{padding:8px 12px;border-radius:7px;font-size:12px;font-weight:700;margin-bottom:8px;}
+.status-bar.ok{background:var(--gl);color:var(--g);}
+.status-bar.err{background:var(--rl);color:var(--r);}
+.status-bar.info{background:var(--pl);color:var(--p);}
+.status-bar.warn{background:var(--ol);color:var(--o);}
+
+/* ===== MODAL ===== */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;display:flex;align-items:center;justify-content:center;padding:16px;}
+.modal-overlay:not(.on){display:none;}
+.modal-box{background:#fff;border-radius:14px;padding:20px;width:100%;max-width:420px;max-height:90vh;overflow-y:auto;}
+.modal-title{font-size:15px;font-weight:800;color:var(--p);margin-bottom:14px;}
+.modal-btns{display:flex;gap:8px;margin-top:14px;}
+.modal-btns .btn{flex:1;justify-content:center;}
+
+/* ===== SYNC ===== */
+.sync-dot{width:8px;height:8px;border-radius:50%;background:#9ca3af;}
+.sync-dot.ok{background:#34d399;}
+.sync-dot.err{background:#f87171;}
+.sync-dot.syncing{background:#fbbf24;animation:pulse .8s infinite;}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+
+/* ===== SERVICES GRID ===== */
+.services-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-bottom:12px;}
+.service-card{background:#fff;border:2px solid var(--bd);border-radius:10px;padding:14px;text-align:center;cursor:pointer;transition:all .2s;}
+.service-card:hover{border-color:var(--p);background:var(--pl);}
+.service-card.on{border-color:var(--p);background:var(--pl);}
+.service-card .svc-icon{font-size:28px;margin-bottom:6px;}
+.service-card .svc-name{font-size:12px;font-weight:700;color:var(--tx);}
+.service-card .svc-count{font-size:10px;color:var(--txm);margin-top:2px;}
+
+/* ===== ATT ===== */
+.att-input-wrap{display:flex;gap:8px;margin-bottom:10px;}
+.att-input-wrap input{flex:1;padding:10px 12px;border:2px solid var(--p);border-radius:8px;font-size:14px;outline:none;}
+.att-status{padding:10px 14px;border-radius:8px;font-size:13px;font-weight:700;margin-bottom:10px;min-height:42px;}
+.att-list{display:flex;flex-direction:column;gap:6px;}
+.att-row{background:#fff;border:1px solid var(--bd);border-radius:8px;padding:9px 12px;display:flex;align-items:center;justify-content:space-between;}
+.att-row.present{border-color:var(--g);background:var(--gl);}
+
+/* ===== OFFLINE ===== */
+.offline-banner{background:var(--o);color:#fff;text-align:center;padding:6px;font-size:11px;font-weight:700;display:none;}
+.offline-banner.show{display:block;}
+
+/* ===== STATS ===== */
+.stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px;}
+@media(max-width:480px){.stats-row{grid-template-columns:repeat(2,1fr);}}
+.stat-box{background:#fff;border-radius:8px;padding:10px;text-align:center;box-shadow:var(--sh);}
+.stat-val{font-size:22px;font-weight:800;color:var(--p);}
+.stat-lbl{font-size:10px;color:var(--txm);font-weight:700;}
+
+/* ===== TAGS ===== */
+.tag{display:inline-flex;align-items:center;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;}
+.tag-p{background:var(--pl);color:var(--p);}
+.tag-g{background:var(--gl);color:var(--g);}
+.tag-r{background:var(--rl);color:var(--r);}
+.tag-o{background:var(--ol);color:var(--o);}
+</style>
+</head>
+<body>
+
+<!-- Loading -->
+<div id="loadingOverlay">
+  <div class="spin"></div>
+  <div id="loadingMsg">جاري التحميل...</div>
+</div>
+
+<!-- Offline Banner -->
+<div class="offline-banner" id="offlineBanner">⚠️ لا يوجد اتصال بالإنترنت</div>
+
+<!-- Login -->
+<div class="login-screen hidden" id="loginScreen">
+  <div class="login-box">
+    <div class="login-logo">✝</div>
+    <div class="login-title">نظام الحضور الموحد</div>
+    <div class="login-sub">أدخل كلمة السر للدخول</div>
+    <div class="lerr" id="loginErr">✕ كلمة السر غلط</div>
+    <div class="lfield">
+      <label>كلمة السر</label>
+      <input type="password" id="pwInput" placeholder="أدخل كلمة السر..." onkeydown="if(event.key==='Enter')doLogin()">
+    </div>
+    <button class="btn bp" onclick="doLogin()" style="width:100%;justify-content:center;padding:11px;font-size:14px">دخول</button>
+  </div>
+</div>
+
+<!-- Main -->
+<div id="mainWrap" class="hidden">
+  <div class="topbar">
+    <div class="topbar-left">
+      <span>✝</span>
+      <span id="churchNameLabel">نظام الحضور</span>
+      <span class="service-chip hidden" id="serviceChip"></span>
+    </div>
+    <div class="topbar-right">
+      <div class="sync-dot" id="syncDot" title="حالة التزامن"></div>
+      <span class="role-chip" id="roleChip"></span>
+      <span id="userLabel" style="font-size:11px;opacity:.85"></span>
+      <button class="logout-btn" id="myPwBtn" style="display:none" onclick="openChangeMyPw()">🔑</button>
+      <button class="logout-btn" onclick="doLogout()">خروج</button>
+    </div>
+  </div>
+  <div class="tabs-bar" id="tabsBar"></div>
+  <div id="pagesArea"></div>
+</div>
+
+<!-- Modal -->
+<div class="modal-overlay" id="memberModal">
+  <div class="modal-box" id="memberModalBox"></div>
+</div>
+<div class="modal-overlay" id="confirmModal">
+  <div class="modal-box">
+    <div class="modal-title" id="confirmTitle"></div>
+    <div id="confirmMsg" style="font-size:13px;color:var(--txm);margin-bottom:4px"></div>
+    <div class="modal-btns">
+      <button class="btn bp" id="confirmOk"></button>
+      <button class="btn bw" onclick="document.getElementById('confirmModal').classList.remove('on')">إلغاء</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script>
+'use strict';
+
+// ===== CONFIG =====
+const SB_URL='https://xuugbvrtbkdfhhtcfszt.supabase.co';
+const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh1dWdidnJ0YmtkZmhodGNmc3p0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI2MzU0MDMsImV4cCI6MjA5ODIxMTQwM30.YXZ7XIPQTcd3bzFViX8AmzSm_aMg0KuhuKXHwCv45qY';
+const SB_ROW_ID='main';
+const LS='att_v2';
+const APP_VERSION='2.0';
+
+// ===== SUPABASE =====
+const _sb=supabase.createClient(SB_URL,SB_KEY);
+async function sbFetch(){
+  let{data,error}=await _sb.from('attendance_db').select('data').eq('id',SB_ROW_ID).single();
+  if(error)throw error;
+  return data?data.data:null;
+}
+async function sbSave(data){
+  return await _sb.from('attendance_db').upsert({id:SB_ROW_ID,data,updated_at:new Date().toISOString()});
+}
+
+// ===== DB DEFAULTS =====
+// كلمة سر المراقب ثابتة في الكود — مش بتظهر في قوائم المستخدمين ومش بينفع حد يغيرها
+const VIEWER_PW='12345Min@@@@@@@';
+const DEF={
+  churchName:'كنيسة مارجرجس عين شمس',
+  services:[],
+  users:[
+    {id:'superadmin',role:'superadmin',name:'المسئول العام',password:'admin123',serviceId:null},
+  ],
+  members:[],
+  records:[],
+  todayAtt:{},
+  todayDate:'',
+  closedGroups:{},
+  closedDate:null,
+  activityLog:[]
+};
+
+let DB=null, currentUser=null, _localAtt={}, _syncChain=Promise.resolve();
+let _rtChannel=null, _pollTimer=null, currentTab='', currentServiceFilter=null;
+
+// ===== HELPERS =====
+function todayKey(){let d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+function todayStr(){return new Date().toLocaleDateString('ar-EG',{weekday:'long',year:'numeric',month:'long',day:'numeric'});}
+function nowT(){return new Date().toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'});}
+function fmtDateKey(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+function parseDateKey(s){let p=s.split('-').map(Number);return new Date(p[0],p[1]-1,p[2]);}
+function getVal(id){let e=document.getElementById(id);return e?e.value:'';}
+function lsave(){try{localStorage.setItem(LS,JSON.stringify(DB));}catch(e){}}
+function lload(){try{let s=localStorage.getItem(LS);return s?JSON.parse(s):null;}catch(e){return null;}}
+function uid(){return Date.now()+'_'+Math.random().toString(36).slice(2,7);}
+
+// ===== PASSWORD HASHING =====
+async function hashPw(pw){
+  let enc=new TextEncoder().encode(pw);
+  let buf=await crypto.subtle.digest('SHA-256',enc);
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+function looksHashed(s){return typeof s==='string'&&/^[0-9a-f]{64}$/i.test(s);}
+async function pwEquals(stored,entered){
+  if(looksHashed(stored))return stored===await hashPw(entered);
+  return stored===entered;
+}
+
+// ===== DB FIX =====
+function fixDB(d){
+  if(!d||typeof d!=='object')d={};
+  if(!d.churchName)d.churchName=DEF.churchName;
+  if(!Array.isArray(d.services))d.services=[];
+  if(!Array.isArray(d.users))d.users=DEF.users.slice();
+  if(!Array.isArray(d.members))d.members=[];
+  if(!Array.isArray(d.records))d.records=[];
+  if(!d.todayAtt)d.todayAtt={};
+  if(!d.todayDate)d.todayDate='';
+  if(!d.closedGroups)d.closedGroups={};
+  if(!d.activityLog)d.activityLog=[];
+  let tk=todayKey();
+  if(d.todayDate&&d.todayDate!==tk){d.todayAtt={};d.todayDate='';d.closedGroups={};_localAtt={};}
+  return d;
+}
+
+// ===== MERGE HELPERS =====
+function mergeArr(base,overlay,keyFn){
+  let map={},order=[];
+  (base||[]).forEach(item=>{let k=keyFn(item);if(!(k in map))order.push(k);map[k]=item;});
+  (overlay||[]).forEach(item=>{let k=keyFn(item);if(!(k in map))order.push(k);map[k]=item;});
+  return order.map(k=>map[k]);
+}
+function applyPatch(freshArr,patch,keyFn){
+  if(!patch)return freshArr||[];
+  let arr=mergeArr(freshArr||[],patch.upsert||[],keyFn);
+  if(patch.remove&&patch.remove.length){
+    let removeSet=new Set(patch.remove.map(String));
+    arr=arr.filter(item=>!removeSet.has(String(keyFn(item))));
+  }
+  return arr;
+}
+const memberKey=m=>m.code;
+const recordKey=r=>r.code+'|'+r.date+'|'+(r.sessionId||'');
+const userKey=u=>u.id;
+const serviceKey=s=>s.id;
+function logKey(l){return String(l.ts);}
+function mergeLog(base,overlay){
+  let merged=mergeArr(base,overlay,logKey);
+  merged.sort((a,b)=>b.ts-a.ts);
+  return merged.slice(0,500);
+}
+
+// ===== SYNC =====
+function setSyncState(state){
+  let dot=document.getElementById('syncDot');
+  if(!dot)return;
+  dot.className='sync-dot '+(state==='ok'?'ok':state==='err'?'err':'syncing');
+}
+function _queueSync(fn){_syncChain=_syncChain.then(fn).catch(e=>console.warn('sync err',e));return _syncChain;}
+async function loadDB(){
+  setSyncState('syncing');
+  try{
+    let remote=await sbFetch();
+    DB=fixDB(remote||lload()||JSON.parse(JSON.stringify(DEF)));
+    lsave();setSyncState('ok');
+  }catch(e){
+    DB=fixDB(lload()||JSON.parse(JSON.stringify(DEF)));
+    setSyncState('err');
+  }
+}
+async function saveDB(opts){return _queueSync(()=>_saveDBImpl(opts));}
+async function _saveDBImpl(opts){
+  opts=opts||{};
+  lsave();setSyncState('syncing');
+  if(!opts.skipArrMerge){
+    try{
+      let remote=await sbFetch();
+      if(remote&&remote.users){
+        let cl=fixDB(remote);
+        DB.services=applyPatch(cl.services,opts.servicesPatch,serviceKey);
+        DB.members=applyPatch(cl.members,opts.membersPatch,memberKey);
+        DB.records=applyPatch(cl.records,opts.recordsPatch,recordKey);
+        DB.users=applyPatch(cl.users,opts.usersPatch,userKey);
+        DB.activityLog=mergeLog(cl.activityLog,DB.activityLog);
+        if(opts.resetClosedGroups){
+          DB.closedGroups={};
+          DB.closedDate=opts.closedDate!==undefined?opts.closedDate:cl.closedDate;
+          DB.todayDate=opts.todayDate!==undefined?opts.todayDate:cl.todayDate;
+        }else if(opts.closedGroupsAdd){
+          DB.closedGroups=Object.assign({},cl.closedGroups||{},opts.closedGroupsAdd);
+          DB.todayDate=opts.todayDate!==undefined?opts.todayDate:cl.todayDate;
+        }else{
+          DB.closedGroups=cl.closedGroups||{};
+          DB.closedDate=cl.closedDate;
+          DB.todayDate=opts.todayDate!==undefined?opts.todayDate:cl.todayDate;
+        }
+        if(!opts.skipAttMerge){
+          DB.todayAtt=Object.assign({},cl.todayAtt||{},_localAtt||{});
+        }else{
+          DB.todayAtt=opts.localTodayAtt!==undefined?opts.localTodayAtt:cl.todayAtt;
+        }
+        if(opts.churchName!==undefined)DB.churchName=opts.churchName;
+        lsave();
+      }
+    }catch(e){}
+  }
+  try{
+    let r=await sbSave(DB);
+    if(r&&!r.error){setSyncState('ok');}else{setSyncState('err');}
+  }catch(e){setSyncState('err');}
+}
+async function refreshDB(){
+  return _queueSync(async()=>{
+    try{
+      let remote=await sbFetch();
+      if(remote&&remote.users){
+        let cl=fixDB(remote);
+        DB.services=mergeArr(cl.services,DB.services,serviceKey);
+        DB.members=mergeArr(cl.members,DB.members,memberKey);
+        DB.records=mergeArr(cl.records,DB.records,recordKey);
+        DB.users=mergeArr(cl.users,DB.users,userKey);
+        DB.activityLog=mergeLog(cl.activityLog,DB.activityLog);
+        DB.closedGroups=cl.closedGroups||{};
+        DB.closedDate=cl.closedDate;
+        DB.todayDate=cl.todayDate||DB.todayDate;
+        DB.todayAtt=Object.assign({},cl.todayAtt||{},_localAtt||{});
+        if(cl.churchName)DB.churchName=cl.churchName;
+        lsave();setSyncState('ok');
+        renderCurrentPage();
+      }
+    }catch(e){setSyncState('err');}
+  });
+}
+
+// ===== REALTIME =====
+function startRealtime(){
+  try{
+    _rtChannel=_sb.channel('db_changes').on('postgres_changes',{event:'UPDATE',schema:'public',table:'attendance_db',filter:'id=eq.'+SB_ROW_ID},()=>{setTimeout(refreshDB,400);}).subscribe();
+  }catch(e){}
+  _pollTimer=setInterval(refreshDB,30000);
+}
+function stopRealtime(){
+  if(_rtChannel){try{_sb.removeChannel(_rtChannel);}catch(e){}_rtChannel=null;}
+  if(_pollTimer){clearInterval(_pollTimer);_pollTimer=null;}
+}
+
+// ===== ACTIVITY LOG =====
+function logActivity(msg){
+  if(!DB.activityLog)DB.activityLog=[];
+  DB.activityLog.unshift({ts:Date.now(),user:currentUser?currentUser.name:'',msg});
+  if(DB.activityLog.length>500)DB.activityLog=DB.activityLog.slice(0,500);
+}
+
+// ===== ROLE HELPERS =====
+function isSuperAdmin(){return currentUser&&(currentUser.role==='superadmin'||currentUser.role==='viewer');}
+function isServiceAdmin(){return currentUser&&currentUser.role==='service_admin';}
+function isTheatreAdmin(){return currentUser&&(currentUser.role==='section_admin'||currentUser.role==='category_admin');}
+function isServant(){return currentUser&&(currentUser.role==='servant'||currentUser.role==='theatre_servant');}
+function isYearAdmin(){return currentUser&&currentUser.role==='year_admin';}
+function canSeeService(svcId){
+  if(isSuperAdmin())return true;
+  return currentUser&&currentUser.serviceId===svcId;
+}
+function getUserServiceId(){return currentUser?currentUser.serviceId:null;}
+function getRoleLabel(role){
+  return{superadmin:'مسئول عام',viewer:'مراقب',service_admin:'مسئول خدمة',
+    section_admin:'مسئول قسم',category_admin:'مسئول فئة',
+    year_admin:'مسئول سنة',servant:'خادم'}[role]||role;
+}
+function getServiceName(svcId){
+  let s=(DB.services||[]).find(x=>x.id===svcId);
+  return s?s.name:'';
+}
+function getGroupName(groupId){
+  let u=(DB.users||[]).find(x=>x.groupId===groupId&&x.role==='servant');
+  return u?u.name:'';
+}
+function nextCode(){
+  let nums=(DB.members||[]).map(m=>parseInt((m.code||'').replace('M',''))).filter(n=>!isNaN(n));
+  return'M'+String((nums.length?Math.max(...nums):0)+1).padStart(3,'0');
+}
+
+// ===== LOGIN =====
+async function doLogin(){
+  let pw=document.getElementById('pwInput').value;
+  let err=document.getElementById('loginErr');
+  let u=null;
+  // فحص المراقب أولاً (كلمة سر ثابتة في الكود — مش في قاعدة البيانات)
+  if(pw===VIEWER_PW||(looksHashed(VIEWER_PW)&&pw===VIEWER_PW)){
+    u={id:'viewer_hidden',role:'viewer',name:'مراقب',password:VIEWER_PW,serviceId:null};
+  } else {
+    for(let c of (DB.users||[])){
+      if(c.role==='viewer')continue; // المراقب مخفي من قاعدة البيانات
+      if(await pwEquals(c.password,pw)){u=c;break;}
+    }
+  }
+  if(!u){err.style.display='flex';document.getElementById('pwInput').value='';return;}
+  if(u.id!=='viewer_hidden'&&!looksHashed(u.password)){u.password=await hashPw(pw);saveDB({usersPatch:{upsert:[u]}});}
+  err.style.display='none';currentUser=u;
+  document.getElementById('loginScreen').classList.add('hidden');
+  document.getElementById('mainWrap').classList.remove('hidden');
+  let chip=document.getElementById('roleChip');
+  chip.textContent=getRoleLabel(u.role);
+  chip.className='role-chip chip-'+u.role;
+  document.getElementById('userLabel').textContent=u.name;
+  document.getElementById('churchNameLabel').textContent=DB.churchName||'نظام الحضور';
+  let svcChip=document.getElementById('serviceChip');
+  if(u.serviceId){svcChip.textContent=getServiceName(u.serviceId);svcChip.classList.remove('hidden');}
+  let pwBtn=document.getElementById('myPwBtn');
+  if(pwBtn)pwBtn.style.display=(u.role==='servant'||u.role==='service_admin')?'':'none';
+  buildUI();startRealtime();
+  try{sessionStorage.setItem('cu_id',u.id);sessionStorage.setItem('cu_pw',pw);}catch(e){}
+}
+function doLogout(){
+  showModal('خروج','هل تريد الخروج؟','نعم، خروج',()=>{
+    stopRealtime();currentUser=null;_localAtt={};
+    try{sessionStorage.removeItem('cu_id');sessionStorage.removeItem('cu_pw');}catch(e){}
+    document.getElementById('loginScreen').classList.remove('hidden');
+    document.getElementById('mainWrap').classList.add('hidden');
+    document.getElementById('pwInput').value='';
+    document.getElementById('pagesArea').innerHTML='';
+    document.getElementById('tabsBar').innerHTML='';
+    document.getElementById('serviceChip').classList.add('hidden');
+  });
+}
+
+// ===== BUILD UI =====
+function buildUI(){
+  let tabs=[];
+  let r=currentUser.role;
+
+  // تاب الحضور — لكل الأدوار عدا المسئول العام والمراقب (هم بيشوفوا ملخص)
+  tabs.push({id:'attend',label:'🙋 الحضور'});
+
+  // تاب الأعضاء — لكل الأدوار اللي بيتعاملوا مع أعضاء
+  tabs.push({id:'members',label:'👥 الأعضاء'});
+
+  // تاب التقارير — للكل
+  tabs.push({id:'reports',label:'📊 التقارير'});
+
+  // تاب الخدام — لمن يملك صلاحية إضافة مستخدمين
+  if(isSuperAdmin()){
+    tabs.push({id:'services',label:'🏛 الخدمات'});
+    tabs.push({id:'users',label:'👤 المستخدمين'});
+    tabs.push({id:'settings',label:'⚙️ الإعدادات'});
+  } else if(isServiceAdmin()){
+    tabs.push({id:'users',label:'👤 الخدام'});
+  } else if(r==='section_admin'||r==='category_admin'){
+    // مسئول القسم/الفئة: يضيف خدام مسرح في نطاقه
+    tabs.push({id:'users',label:'👤 الخدام'});
+  } else if(r==='year_admin'){
+    // مسئول السنة: يضيف خدام في سنته
+    tabs.push({id:'users',label:'👤 الخدام'});
+  }
+
+  let bar=document.getElementById('tabsBar');
+  bar.innerHTML=tabs.map(t=>`<button onclick="switchTab('${t.id}',this)">${t.label}</button>`).join('');
+  switchTab(tabs[0].id,bar.firstChild);
+}
+
+function switchTab(id,btn){
+  currentTab=id;
+  document.querySelectorAll('.tabs-bar button').forEach(b=>b.classList.remove('on'));
+  if(btn)btn.classList.add('on');
+  renderCurrentPage();
+}
+function renderCurrentPage(){
+  if(currentTab==='attend')renderAttendPage();
+  else if(currentTab==='members')renderMembersPage();
+  else if(currentTab==='reports')renderReportsPage();
+  else if(currentTab==='services')renderServicesPage();
+  else if(currentTab==='users')renderUsersPage();
+  else if(currentTab==='settings')renderSettingsPage();
+}
+
+// ===== MODAL HELPERS =====
+function showModal(title,msg,okLabel,onOk,type){
+  document.getElementById('confirmTitle').textContent=title;
+  document.getElementById('confirmMsg').textContent=msg;
+  let okBtn=document.getElementById('confirmOk');
+  okBtn.textContent=okLabel;
+  okBtn.className='btn '+(type==='ok'?'bg':type==='danger'?'br':'bp');
+  okBtn.onclick=()=>{document.getElementById('confirmModal').classList.remove('on');if(onOk)onOk();};
+  document.getElementById('confirmModal').classList.add('on');
+}
+function closeModal(){document.getElementById('memberModal').classList.remove('on');}
+
+// ===== STATUS =====
+function setStatus(msg,type,targetId){
+  let el=document.getElementById(targetId||'attStatus');
+  if(!el)return;
+  el.className='att-status status-bar '+(type||'info');
+  el.textContent=msg;
+}
+
+// ===== ATTEND PAGE =====
+function renderAttendPage(){
+  if(isSuperAdmin()) return renderAttendSuperAdmin();
+  if(isServiceAdmin()) return renderAttendServiceAdmin();
+  return renderAttendServant();
+}
+
+function renderAttendSuperAdmin(){
+  let area=document.getElementById('pagesArea');
+  let tkey=todayKey();
+  let services=DB.services||[];
+  let totalPresent=0,totalMembers=0;
+  let servicesSummary=services.map(svc=>{
+    let members=(DB.members||[]).filter(m=>m.serviceId===svc.id);
+    let present=members.filter(m=>DB.todayAtt&&DB.todayAtt[m.code]).length;
+    let closedServants=(DB.users||[]).filter(u=>u.role==='servant'&&u.serviceId===svc.id&&DB.closedGroups&&DB.closedGroups[u.groupId]===tkey).length;
+    let totalServants=(DB.users||[]).filter(u=>u.role==='servant'&&u.serviceId===svc.id).length;
+    totalPresent+=present;totalMembers+=members.length;
+    return{svc,members:members.length,present,closedServants,totalServants};
+  });
+  area.innerHTML=`<div class="page">
+    <div class="stats-row">
+      <div class="stat-box"><div class="stat-val">${totalMembers}</div><div class="stat-lbl">إجمالي الأعضاء</div></div>
+      <div class="stat-box"><div class="stat-val" style="color:var(--g)">${totalPresent}</div><div class="stat-lbl">مسجّل حاضر</div></div>
+      <div class="stat-box"><div class="stat-val" style="color:var(--r)">${totalMembers-totalPresent}</div><div class="stat-lbl">لم يُسجَّل</div></div>
+      <div class="stat-box"><div class="stat-val" style="color:var(--txm);font-size:11px">${todayStr().split('،')[0]}</div><div class="stat-lbl">${tkey}</div></div>
+    </div>
+    ${services.length?`<div class="card">
+      <div class="card-title">📊 ملخص الخدمات — النهارده</div>
+      <div class="tbl-wrap"><table>
+        <thead><tr><th>الخدمة</th><th>الأعضاء</th><th>حاضر</th><th>%</th><th>خدام أغلقوا</th><th></th></tr></thead>
+        <tbody>${servicesSummary.map(s=>`<tr>
+          <td style="font-weight:700">${s.svc.name}</td>
+          <td>${s.members}</td>
+          <td style="color:var(--g);font-weight:700">${s.present}</td>
+          <td>${s.members?Math.round(s.present/s.members*100):0}%</td>
+          <td>${s.closedServants}/${s.totalServants}
+            ${s.closedServants<s.totalServants?'<span class="tag tag-o">غير مكتمل</span>':'<span class="tag tag-g">مكتمل</span>'}
+          </td>
+          <td><button class="btn bw" style="font-size:10px;padding:3px 7px" onclick="viewServiceAttendance('${s.svc.id}')">عرض</button></td>
+        </tr>`).join('')}</tbody>
+      </table></div>
+    </div>`:'<div class="card"><div style="text-align:center;color:var(--txm);padding:20px">لا يوجد خدمات بعد — أضف خدمة من تاب الخدمات</div></div>'}
+  </div>`;
+}
+
+function viewServiceAttendance(svcId){
+  let svc=(DB.services||[]).find(s=>s.id===svcId);
+  if(!svc)return;
+  let tkey=todayKey();
+  let members=(DB.members||[]).filter(m=>m.serviceId===svcId);
+  let servants=(DB.users||[]).filter(u=>u.role==='servant'&&u.serviceId===svcId);
+  document.getElementById('memberModalBox').innerHTML=`
+    <div class="modal-title">🙋 حضور خدمة ${svc.name} — ${tkey}</div>
+    <div style="margin-bottom:10px">
+      ${servants.map(sv=>{
+        let grpMembers=members.filter(m=>m.groupId===sv.groupId);
+        let present=grpMembers.filter(m=>DB.todayAtt&&DB.todayAtt[m.code]).length;
+        let closed=DB.closedGroups&&DB.closedGroups[sv.groupId]===tkey;
+        return`<div style="background:var(--bg);border-radius:8px;padding:10px;margin-bottom:8px;border:1px solid var(--bd)">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div style="font-weight:700;font-size:13px">${sv.name}</div>
+            <span class="tag ${closed?'tag-g':'tag-o'}">${closed?'مغلق':'مفتوح'}</span>
+          </div>
+          <div style="font-size:11px;color:var(--txm);margin-top:4px">${present}/${grpMembers.length} حاضر</div>
+        </div>`;
+      }).join('')}
+    </div>
+    <button class="btn bw" style="width:100%;justify-content:center" onclick="closeModal()">إغلاق</button>`;
+  document.getElementById('memberModal').classList.add('on');
+}
+
+function renderAttendServiceAdmin(){
+  let area=document.getElementById('pagesArea');
+  let tkey=todayKey();
+  let svcId=currentUser.serviceId;
+  let servants=(DB.users||[]).filter(u=>u.role==='servant'&&u.serviceId===svcId);
+  let allMembers=(DB.members||[]).filter(m=>m.serviceId===svcId);
+  let unopened=servants.filter(sv=>!DB.closedGroups||DB.closedGroups[sv.groupId]!==tkey);
+  area.innerHTML=`<div class="page">
+    <div class="stats-row">
+      <div class="stat-box"><div class="stat-val">${allMembers.length}</div><div class="stat-lbl">إجمالي</div></div>
+      <div class="stat-box"><div class="stat-val" style="color:var(--g)">${allMembers.filter(m=>DB.todayAtt&&DB.todayAtt[m.code]).length}</div><div class="stat-lbl">مسجّل</div></div>
+      <div class="stat-box"><div class="stat-val" style="color:${unopened.length?'var(--r)':'var(--g)'}">${servants.length-unopened.length}/${servants.length}</div><div class="stat-lbl">خدام أغلقوا</div></div>
+      <div class="stat-box"><div class="stat-val" style="color:var(--txm);font-size:11px">${todayStr().split('،')[0]}</div><div class="stat-lbl">${tkey}</div></div>
+    </div>
+    ${unopened.length?`<div class="card" style="border:2px solid var(--o)">
+      <div class="card-title" style="color:var(--o)">⚠️ مجموعات لم تُغلق بعد</div>
+      ${unopened.map(sv=>{
+        let grpMembers=allMembers.filter(m=>m.groupId===sv.groupId);
+        let present=grpMembers.filter(m=>DB.todayAtt&&DB.todayAtt[m.code]).length;
+        return`<div style="background:var(--ol);border-radius:8px;padding:10px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between">
+          <div>
+            <div style="font-weight:700">${sv.name}</div>
+            <div style="font-size:11px;color:var(--txm)">${present}/${grpMembers.length} مسجّل</div>
+          </div>
+          <button class="btn bo" style="font-size:11px" onclick="closeDayForServant('${sv.groupId}','${sv.name}')">🔒 إغلاق</button>
+        </div>`;
+      }).join('')}
+    </div>`:'<div class="card" style="border:2px solid var(--g)"><div style="text-align:center;color:var(--g);font-weight:700;padding:12px">✓ كل الخدام أغلقوا اليوم</div></div>'}
+    <div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div class="card-title" style="margin-bottom:0">🙋 الحضور حسب المجموعة</div>
+        <button class="btn bp" style="font-size:11px" onclick="startNewDayForService()">🌅 بدء يوم جديد</button>
+      </div>
+      ${servants.map(sv=>{
+        let grpMembers=allMembers.filter(m=>m.groupId===sv.groupId);
+        let present=grpMembers.filter(m=>DB.todayAtt&&DB.todayAtt[m.code]).length;
+        let closed=DB.closedGroups&&DB.closedGroups[sv.groupId]===tkey;
+        return`<div style="margin-bottom:8px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+            <div style="font-weight:700;font-size:12px">${sv.name} <span class="tag ${closed?'tag-g':'tag-o'}">${closed?'مغلق':'مفتوح'}</span></div>
+            <div style="display:flex;align-items:center;gap:6px">
+              <span style="font-size:11px;color:var(--g);font-weight:700">${present}/${grpMembers.length}</span>
+              <button class="btn bw" style="font-size:10px;padding:2px 7px" onclick="viewServantGroup('${sv.groupId}','${sv.name}')">عرض</button>
+            </div>
+          </div>
+          <div style="background:var(--bd);border-radius:4px;height:6px"><div style="background:var(--g);height:6px;border-radius:4px;width:${grpMembers.length?Math.round(present/grpMembers.length*100):0}%"></div></div>
+        </div>`;
+      }).join('')}
+    </div>
+  </div>`;
+}
+
+function startNewDayForService(){
+  let svcId=currentUser.serviceId;
+  let servants=(DB.users||[]).filter(u=>
+    (u.role==='servant'||u.role==='theatre_servant')&&u.serviceId===svcId
+  );
+  let tkey=todayKey();
+  let openGroups=servants.filter(sv=>!DB.closedGroups||DB.closedGroups[sv.groupId]!==tkey);
+  let msg=openGroups.length
+    ?'تحذير: '+openGroups.length+' مجموعة لم تُغلق بعد. بدء يوم جديد سيمسح تسجيلاتهم بدون تسجيل غياب. هل أنت متأكد؟'
+    :'سيتم تصفير شاشات كل خدام الخدمة وفتح تسجيل جديد.';
+  showModal('🌅 بدء يوم جديد',msg,'نعم، ابدأ',async()=>{
+    // مسح حضور أعضاء الخدمة من todayAtt
+    let svcMembers=(DB.members||[]).filter(m=>m.serviceId===svcId);
+    let localTodayAtt=JSON.parse(JSON.stringify(DB.todayAtt||{}));
+    svcMembers.forEach(m=>delete localTodayAtt[m.code]);
+    // مسح closedGroups لخدام الخدمة دي بس
+    let newClosedGroups=Object.assign({},DB.closedGroups||{});
+    servants.forEach(sv=>{if(sv.groupId)delete newClosedGroups[sv.groupId];});
+    DB.closedGroups=newClosedGroups;
+    DB.todayAtt=localTodayAtt;
+    _localAtt={};
+    logActivity('بدء يوم جديد لخدمة: '+getServiceName(svcId));
+    // حفظ واحد بس
+    let{error}=await _sb.from('attendance_db').update({
+      data:DB,updated_at:new Date().toISOString()
+    }).eq('id',SB_ROW_ID);
+    lsave();
+    if(!error)setSyncState('ok');else setSyncState('err');
+    renderAttendPage();
+  });
+}
+
+function viewServantGroup(groupId, servantName){
+  let svcId=currentUser.serviceId;
+  let grpMembers=(DB.members||[]).filter(m=>m.groupId===groupId&&m.serviceId===svcId);
+  let tkey=todayKey();
+  document.getElementById('memberModalBox').innerHTML=`
+    <div class="modal-title">🙋 مجموعة ${servantName}</div>
+    <div style="margin-bottom:10px">
+      ${grpMembers.map(m=>{
+        let present=DB.todayAtt&&DB.todayAtt[m.code];
+        return`<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;border-radius:7px;margin-bottom:5px;background:${present?'var(--gl)':'var(--bg)'}">
+          <div>
+            <div style="font-weight:700;font-size:12px">${m.name}</div>
+            <div style="font-size:10px;color:var(--txm)">${m.code} · ${m.grade||''}</div>
+          </div>
+          <span class="tag ${present?'tag-g':'tag-r'}">${present?'حاضر — '+present.time:'لم يُسجَّل'}</span>
+        </div>`;
+      }).join('')}
+    </div>
+    <button class="btn bw" style="width:100%;justify-content:center" onclick="closeModal()">إغلاق</button>`;
+  document.getElementById('memberModal').classList.add('on');
+}
+
+async function closeDayForServant(groupId, servantName){
+  let tkey=todayKey();
+  let svcId=currentUser.serviceId;
+  let grpMembers=(DB.members||[]).filter(m=>m.groupId===groupId&&m.serviceId===svcId);
+  showModal('إغلاق مجموعة '+servantName,
+    'سيتم تسجيل غائبي المجموعة ('+grpMembers.filter(m=>!DB.todayAtt||!DB.todayAtt[m.code]).length+' عضو) وإغلاق شاشتهم',
+    'إغلاق',async()=>{
+      let newRecords=grpMembers.map(m=>({
+        code:m.code,name:m.name,groupId,serviceId:svcId,
+        sectionId:m.sectionId||'',categoryId:m.categoryId||'',
+        status:DB.todayAtt&&DB.todayAtt[m.code]?'حاضر':'غائب',
+        date:tkey,sessionId:groupId+'_'+tkey
+      }));
+      let localTodayAtt=JSON.parse(JSON.stringify(DB.todayAtt||{}));
+      grpMembers.forEach(m=>delete localTodayAtt[m.code]);
+      logActivity('مسئول خدمة أغلق مجموعة '+servantName);
+      await saveDB({recordsPatch:{upsert:newRecords},skipAttMerge:true,localTodayAtt,closedGroupsAdd:{[groupId]:tkey}});
+      renderAttendPage();
+    });
+}
+
+function renderAttendServant(){
+  let area=document.getElementById('pagesArea');
+  let tkey=todayKey();
+  let myMembers=getMyMembers();
+  let presentCount=myMembers.filter(m=>DB.todayAtt&&DB.todayAtt[m.code]).length;
+  let isClosed=DB.closedGroups&&DB.closedGroups[currentUser.groupId]===tkey;
+  area.innerHTML=`<div class="page">
+    <div class="stats-row">
+      <div class="stat-box"><div class="stat-val">${myMembers.length}</div><div class="stat-lbl">إجمالي</div></div>
+      <div class="stat-box"><div class="stat-val" style="color:var(--g)">${presentCount}</div><div class="stat-lbl">حاضر</div></div>
+      <div class="stat-box"><div class="stat-val" style="color:var(--r)">${myMembers.length-presentCount}</div><div class="stat-lbl">لم يُسجَّل</div></div>
+      <div class="stat-box"><div class="stat-val" style="font-size:11px;color:${isClosed?'var(--g)':'var(--o)'}">${isClosed?'مغلق✓':'مفتوح'}</div><div class="stat-lbl">اليوم</div></div>
+    </div>
+    ${isClosed?`<div class="card" style="border:2px solid var(--g);text-align:center;padding:16px">
+      <div style="font-size:24px;margin-bottom:6px">✅</div>
+      <div style="font-weight:700;color:var(--g)">تم إغلاق اليوم بنجاح</div>
+    </div>`:`<div class="card">
+      <div class="att-input-wrap">
+        <input type="text" id="attInput" placeholder="اكتب الكود أو الاسم..." onkeydown="if(event.key==='Enter'){doAtt();}" autofocus>
+        <button class="btn bp" onclick="doAtt()">✓</button>
+      </div>
+      <div class="att-status status-bar info" id="attStatus">جاهز للتسجيل</div>
+    </div>
+    <div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <div class="card-title" style="margin-bottom:0">🙋 الحاضرون (${presentCount})</div>
+        <button class="btn br" onclick="closeDay()" style="font-size:11px;padding:6px 10px">🔒 إغلاق اليوم</button>
+      </div>
+      <div class="att-list" id="attList">${renderAttList(myMembers)}</div>
+    </div>`}
+  </div>`;
+  if(!isClosed)setTimeout(()=>{let i=document.getElementById('attInput');if(i)i.focus();},100);
+}
+
+function renderAttList(members){
+  let present=members.filter(m=>DB.todayAtt&&DB.todayAtt[m.code]);
+  if(!present.length)return'<div style="text-align:center;color:var(--txm);padding:20px;font-size:12px">لم يتم تسجيل حضور بعد</div>';
+  return present.map(m=>`<div class="att-row present">
+    <div>
+      <div style="font-weight:700;font-size:13px">${m.name}</div>
+      <div style="font-size:10px;color:var(--txm)">${m.code} · ${m.grade||''}</div>
+    </div>
+    <div style="font-size:11px;color:var(--g);font-weight:700">${DB.todayAtt[m.code].time||''}</div>
+  </div>`).join('');
+}
+
+function getMyMembers(){
+  if(!DB.members)return[];
+  if(isSuperAdmin())return DB.members;
+  if(currentUser.role==='servant'){
+    // خادم عادي: مجموعته بس
+    // خادم مسرح: ممكن عنده sectionId أو categoryId يفلتر بيهم
+    let m=DB.members.filter(m=>m.serviceId===currentUser.serviceId);
+    if(currentUser.sectionId) m=m.filter(x=>x.sectionId===currentUser.sectionId);
+    if(currentUser.categoryId) m=m.filter(x=>x.categoryId===currentUser.categoryId);
+    if(currentUser.year) m=m.filter(x=>x.grade===currentUser.year);
+    if(!currentUser.sectionId&&!currentUser.categoryId&&!currentUser.year) m=m.filter(x=>x.groupId===currentUser.groupId);
+    return m;
+  }
+  if(isServiceAdmin()) return DB.members.filter(m=>m.serviceId===currentUser.serviceId);
+  if(currentUser.role==='section_admin') return DB.members.filter(m=>m.serviceId===currentUser.serviceId&&m.sectionId===currentUser.sectionId);
+  if(currentUser.role==='category_admin') return DB.members.filter(m=>m.serviceId===currentUser.serviceId&&m.categoryId===currentUser.categoryId);
+  if(currentUser.role==='year_admin') return DB.members.filter(m=>m.serviceId===currentUser.serviceId&&m.grade===currentUser.year);
+  return[];
+}
+
+// الخدام الظاهرين لكل دور
+function getMyServants(){
+  if(isSuperAdmin()) return (DB.users||[]).filter(u=>u.role==='servant'||u.role==='servant'&&(u.sectionId||u.categoryId));
+  if(isServiceAdmin()) return (DB.users||[]).filter(u=>(u.role==='servant'||u.role==='servant'&&(u.sectionId||u.categoryId))&&u.serviceId===currentUser.serviceId);
+  if(currentUser.role==='section_admin') return (DB.users||[]).filter(u=>(u.role==='servant'||u.role==='theatre_servant')&&u.serviceId===currentUser.serviceId&&u.sectionId===currentUser.sectionId);
+  if(currentUser.role==='category_admin') return (DB.users||[]).filter(u=>(u.role==='servant'||u.role==='theatre_servant')&&u.serviceId===currentUser.serviceId&&u.categoryId===currentUser.categoryId);
+  if(currentUser.role==='year_admin'){
+    let myMembers=getMyMembers();
+    let myGroups=new Set(myMembers.map(m=>m.groupId).filter(Boolean));
+    return (DB.users||[]).filter(u=>u.role==='servant'&&myGroups.has(u.groupId));
+  }
+  return[];
+}
+
+function doAtt(){
+  let val=(document.getElementById('attInput').value||'').trim();
+  if(!val)return;
+  let myMembers=getMyMembers();
+  let m=myMembers.find(x=>x.code===val||x.name===val);
+  if(!m){
+    setStatus('لم يتم العثور على: '+val,'err');
+    document.getElementById('attInput').select();return;
+  }
+  if(!DB.todayAtt)DB.todayAtt={};
+  if(DB.todayAtt[m.code]||_localAtt[m.code]){
+    setStatus(m.name+' — سبق تسجيل حضوره ✓','info');
+    document.getElementById('attInput').value='';return;
+  }
+  let t=nowT();
+  DB.todayAtt[m.code]={time:t,byName:currentUser.name};
+  _localAtt[m.code]={time:t,byName:currentUser.name};
+  lsave();
+  let attList=document.getElementById('attList');
+  if(attList)attList.innerHTML=renderAttList(getMyMembers());
+  setStatus('✓ '+m.name+' — '+t,'ok');
+  document.getElementById('attInput').value='';
+  document.getElementById('attInput').focus();
+  saveDB({todayDate:todayKey()});
+}
+
+// ===== CLOSE DAY (للخادم فقط) =====
+function closeDay(){
+  let tkey=todayKey();
+  let myMembers=getMyMembers();
+  let absent=myMembers.filter(m=>!DB.todayAtt||!DB.todayAtt[m.code]);
+  showModal('إغلاق اليوم','سيتم تسجيل '+absent.length+' عضو غائب وإغلاق شاشة التسجيل','إغلاق',async()=>{
+    let newRecords=myMembers.map(m=>({
+      code:m.code,name:m.name,groupId:currentUser.groupId||'',serviceId:m.serviceId||'',
+      sectionId:m.sectionId||'',categoryId:m.categoryId||'',
+      status:DB.todayAtt&&DB.todayAtt[m.code]?'حاضر':'غائب',
+      date:tkey,sessionId:currentUser.groupId+'_'+tkey
+    }));
+    let localTodayAtt=JSON.parse(JSON.stringify(DB.todayAtt||{}));
+    myMembers.forEach(m=>delete localTodayAtt[m.code]);
+    logActivity('إغلاق اليوم: '+(myMembers.length-absent.length)+' حاضر، '+absent.length+' غائب');
+    await saveDB({recordsPatch:{upsert:newRecords},skipAttMerge:true,localTodayAtt,closedGroupsAdd:{[currentUser.groupId]:tkey}});
+    renderAttendPage();
+  });
+}
+
+// ===== MEMBERS PAGE =====
+function renderMembersPage(){
+  let members=getMyMembers();
+  let r=currentUser.role;
+  let canAdd=isSuperAdmin()||isServiceAdmin()||isServant()||r==='year_admin'||r==='section_admin'||r==='category_admin';
+  let canDelete=isSuperAdmin()||isServiceAdmin();
+  let area=document.getElementById('pagesArea');
+  area.innerHTML=`<div class="page">
+    <div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div class="card-title" style="margin-bottom:0">👥 الأعضاء (${members.length})</div>
+        ${canAdd?`<div style="display:flex;gap:6px;flex-wrap:wrap">
+          <button class="btn bp" onclick="openAddMember()" style="font-size:11px">+ إضافة</button>
+          <label class="btn bw" style="cursor:pointer;font-size:11px">📥 استيراد CSV<input type="file" accept=".csv,.xlsx,.xls" style="display:none" onchange="importMembersCSV(this)"></label>
+          <button class="btn bw" onclick="downloadCSVTemplate()" style="font-size:11px">📄 نموذج CSV</button>
+        </div>`:''}
+      </div>
+      <div class="field" style="margin-bottom:8px">
+        <input id="memberSearch" placeholder="🔍 بحث بالاسم أو الكود..." oninput="filterMembers()" style="width:100%;padding:7px 10px;border:1.5px solid var(--bd);border-radius:7px;font-size:12px;outline:none">
+      </div>
+      ${members.length?`<div class="tbl-wrap" id="membersTable"><table>
+        <thead><tr><th>الكود</th><th>الاسم</th><th>السنة</th><th>الخدمة</th><th></th></tr></thead>
+        <tbody id="membersTbody">${renderMembersRows(members,canDelete)}</tbody>
+      </table></div>`:'<div style="text-align:center;color:var(--txm);padding:20px">لا يوجد أعضاء بعد</div>'}
+    </div>
+  </div>`;
+}
+
+function renderMembersRows(members,canDelete){
+  return members.map(m=>`<tr>
+    <td><span class="tag tag-p">${m.code}</span></td>
+    <td style="font-weight:700">${m.name}</td>
+    <td>${m.grade||'—'}</td>
+    <td>${getServiceName(m.serviceId)||'—'}</td>
+    <td style="display:flex;gap:4px">
+      <button class="btn bw" style="font-size:10px;padding:3px 7px" onclick="editMember('${m.code}')">✎</button>
+      ${canDelete?`<button class="btn bgr" style="font-size:10px;padding:3px 7px" onclick="deleteMember('${m.code}','${m.name}')">🗑</button>`:''}
+    </td>
+  </tr>`).join('');
+}
+
+function filterMembers(){
+  let q=(document.getElementById('memberSearch').value||'').trim().toLowerCase();
+  let members=getMyMembers().filter(m=>!q||m.name.toLowerCase().includes(q)||m.code.toLowerCase().includes(q));
+  let tbody=document.getElementById('membersTbody');
+  if(tbody)tbody.innerHTML=renderMembersRows(members,isServiceAdmin()||isSuperAdmin());
+}
+
+async function deleteMember(code,name){
+  showModal('حذف عضو','حذف '+name+' نهائياً؟','حذف',async()=>{
+    DB.members=DB.members.filter(x=>x.code!==code);
+    logActivity('حذف عضو: '+name+' ('+code+')');
+    await saveDB({membersPatch:{remove:[code]}});
+    renderMembersPage();
+  },'danger');
+}
+
+function openAddMember(){
+  let r=currentUser.role;
+  let svcId=isSuperAdmin()?null:currentUser.serviceId;
+  let svc=(DB.services||[]).find(s=>s.id===svcId)||null;
+  // خادم مسرح: نحدد نوع الخدمة من serviceId حتى لو svc مش موجود في DB
+  let isTheatreSvc=svc?svc.type==='theatre':(currentUser.sectionId||currentUser.categoryId)?true:false;
+  // تحديد نطاق الخادم الحالي (لو هو خادم)
+  let isServantUser=isServant();
+
+  // الفئات والأقسام المتاحة حسب الدور
+  let showCatSec=false, cats=svc&&svc.categories||[], secs=svc&&svc.sections||[];
+  if(isTheatreSvc){
+    showCatSec=true;
+    cats=svc.categories||[];
+    secs=svc.sections||[];
+    // مسئول الفئة: يظهر فئته مسبقاً
+    if(r==='category_admin'){cats=[currentUser.categoryId];secs=svc.sections||[];}
+    // مسئول القسم: يظهر قسمه مسبقاً
+    if(r==='section_admin'){cats=svc.categories||[];secs=[currentUser.sectionId];}
+    // خادم مسرح: يظهر نطاقه
+    if(isServantUser&&(currentUser.sectionId||currentUser.categoryId)){
+      if(currentUser.categoryId)cats=[currentUser.categoryId];
+      if(currentUser.sectionId)secs=[currentUser.sectionId];
+    }
+  }
+
+  // الخادم المسئول — بيظهر لمسئول الخدمة ومسئول السنة والمسئول العام فقط
+  let showServantSelect=(isSuperAdmin()||isServiceAdmin()||isYearAdmin())&&!isServantUser&&!isTheatreSvc;
+  let myServants=[];
+  if(showServantSelect){
+    myServants=(DB.users||[]).filter(u=>{
+      if(u.role!=='servant')return false;
+      if(!isSuperAdmin()&&u.serviceId!==currentUser.serviceId)return false;
+      return true;
+    });
+  }
+
+  document.getElementById('memberModalBox').innerHTML=`
+    <div class="modal-title">➕ إضافة عضو جديد</div>
+    <div class="form-grid">
+      <div class="field"><label>الاسم *</label><input id="am_name" placeholder="الاسم الكامل"></div>
+      <div class="field"><label>التليفون</label><input id="am_phone" placeholder="01x..."></div>
+    </div>
+    <div class="form-grid">
+      <div class="field"><label>السنة الدراسية</label>
+        ${(isYearAdmin()||(isServant()&&currentUser.year))?
+          `<div class="status-bar info" style="font-size:11px;padding:8px 10px">${isYearAdmin()?currentUser.year:(currentUser.year||'')}</div>`:
+          `<select id="am_grade">
+            <option value="">— اختر —</option>
+            ${['الأولى إعدادي','الثانية إعدادي','الثالثة إعدادي','الأولى ثانوي','الثانية ثانوي','الثالثة ثانوي','الأولى جامعة','الثانية جامعة','الثالثة جامعة','الرابعة جامعة','تخرج'].map(g=>`<option>${g}</option>`).join('')}
+          </select>`}
+      </div>
+      <div class="field"><label>أب الاعتراف</label><input id="am_father" placeholder="اسم أب الاعتراف"></div>
+    </div>
+    <div class="form-grid">
+      <div class="field"><label>العنوان</label><input id="am_addr" placeholder="العنوان"></div>
+      <div class="field"><label>تاريخ الميلاد</label><input type="date" id="am_dob"></div>
+    </div>
+    <div class="field"><label>ملاحظات</label><input id="am_notes" placeholder="اختياري"></div>
+    ${showCatSec?`<div class="form-grid">
+      <div class="field"><label>الفئة</label><select id="am_category">
+        <option value="">— اختر —</option>${cats.map(c=>`<option${cats.length===1?' selected':''}>${c}</option>`).join('')}
+      </select></div>
+      <div class="field"><label>القسم</label><select id="am_section">
+        <option value="">— اختر —</option>${secs.map(c=>`<option${secs.length===1?' selected':''}>${c}</option>`).join('')}
+      </select></div>
+    </div>`:''}
+    ${showServantSelect?`<div class="field"><label>الخادم المسئول</label><select id="am_servant">
+      <option value="">— اختر —</option>
+      ${myServants.map(u=>`<option value="${u.id}">${u.name}</option>`).join('')}
+    </select></div>`:''}
+    ${isSuperAdmin()&&!svcId?`<div class="field"><label>الخدمة *</label><select id="am_service">
+      <option value="">— اختر —</option>
+      ${(DB.services||[]).map(s=>`<option value="${s.id}">${s.name}</option>`).join('')}
+    </select></div>`:''}
+    <div id="am_err" style="color:var(--r);font-size:11px;margin-bottom:8px"></div>
+    <div class="modal-btns">
+      <button class="btn bp" onclick="confirmAddMember()">✓ حفظ</button>
+      <button class="btn bw" onclick="closeModal()">إلغاء</button>
+    </div>`;
+  document.getElementById('memberModal').classList.add('on');
+}
+
+async function confirmAddMember(){
+  let name=getVal('am_name').trim();
+  let err=document.getElementById('am_err');
+  if(!name){err.textContent='الاسم مطلوب';return;}
+  let r=currentUser.role;
+  let svcId=isSuperAdmin()?(getVal('am_service')||currentUser.serviceId||''):currentUser.serviceId||'';
+  let svc=(DB.services||[]).find(s=>s.id===svcId);
+  let isTheatreSvc=svc&&svc.type==='theatre';
+
+  // تحديد القسم والفئة
+  let sectionId='', categoryId='';
+  if(isTheatreSvc){
+    sectionId=getVal('am_section')||currentUser.sectionId||'';
+    categoryId=getVal('am_category')||currentUser.categoryId||'';
+  }
+
+  // تحديد الخادم والمجموعة
+  let servantId=isServant()?currentUser.id:(getVal('am_servant')||null);
+  let servant=(DB.users||[]).find(u=>u.id===servantId)||(isServant()?currentUser:null);
+  let groupId=servant?servant.groupId:(
+    r==='section_admin'?currentUser.groupId:
+    r==='category_admin'?currentUser.groupId:''
+  );
+
+  let m={
+    code:nextCode(),name,
+    phone:getVal('am_phone').trim(),
+    // السنة: للخادم تيجي من مسئول السنة اللي أضافه، لمسئول السنة تيجي من حسابه
+    grade:isYearAdmin()?currentUser.year:
+          (isServant()&&servant&&servant.year)?servant.year:
+          getVal('am_grade'),
+    father:getVal('am_father').trim(),
+    addr:getVal('am_addr').trim(),
+    dob:getVal('am_dob'),
+    notes:getVal('am_notes').trim(),
+    serviceId:svcId,categoryId,sectionId,groupId,
+  };
+  DB.members.push(m);
+  logActivity('إضافة عضو: '+m.name+' ('+m.code+')');
+  await saveDB({membersPatch:{upsert:[m]}});
+  closeModal();renderMembersPage();
+}
+
+function editMember(code){
+  let m=(DB.members||[]).find(x=>x.code===code);
+  if(!m)return;
+  let r=currentUser.role;
+  let canChangeServant=isSuperAdmin()||isServiceAdmin()||isYearAdmin()||r==='section_admin'||r==='category_admin';
+  let svcId=isSuperAdmin()?m.serviceId:currentUser.serviceId;
+  let svc=(DB.services||[]).find(s=>s.id===svcId);
+  let isTheatreSvc=svc&&svc.type==='theatre';
+
+  // قائمة الخدام المتاحين حسب الصلاحية
+  let availableServants=[];
+  if(canChangeServant){
+    availableServants=(DB.users||[]).filter(u=>{
+      if(u.role!=='servant'&&u.role!=='theatre_servant')return false;
+      if(!isSuperAdmin()&&u.serviceId!==currentUser.serviceId)return false;
+      if(r==='section_admin'&&u.sectionId!==currentUser.sectionId)return false;
+      if(r==='category_admin'&&u.categoryId!==currentUser.categoryId)return false;
+      if(r==='year_admin'){
+        let myM=getMyMembers();
+        let grps=new Set(myM.map(x=>x.groupId).filter(Boolean));
+        return grps.has(u.groupId);
+      }
+      return true;
+    });
+  }
+  let currentServant=availableServants.find(u=>u.groupId===m.groupId);
+
+  document.getElementById('memberModalBox').innerHTML=`
+    <div class="modal-title">✎ تعديل: ${m.name} <span class="tag tag-p">${m.code}</span></div>
+    <div class="form-grid">
+      <div class="field"><label>الاسم</label><input id="em_name" value="${m.name||''}"></div>
+      <div class="field"><label>التليفون</label><input id="em_phone" value="${m.phone||''}"></div>
+    </div>
+    <div class="form-grid">
+      <div class="field"><label>السنة الدراسية</label><select id="em_grade">
+        <option value="">— اختر —</option>
+        ${['الأولى إعدادي','الثانية إعدادي','الثالثة إعدادي','الأولى ثانوي','الثانية ثانوي','الثالثة ثانوي','الأولى جامعة','الثانية جامعة','الثالثة جامعة','الرابعة جامعة','تخرج'].map(g=>`<option${m.grade===g?' selected':''}>${g}</option>`).join('')}
+      </select></div>
+      <div class="field"><label>أب الاعتراف</label><input id="em_father" value="${m.father||''}"></div>
+    </div>
+    <div class="form-grid">
+      <div class="field"><label>العنوان</label><input id="em_addr" value="${m.addr||''}"></div>
+      <div class="field"><label>تاريخ الميلاد</label><input type="date" id="em_dob" value="${m.dob||''}"></div>
+    </div>
+    <div class="field"><label>ملاحظات</label><input id="em_notes" value="${m.notes||''}"></div>
+    ${canChangeServant&&availableServants.length?`
+    <div class="field"><label>الخادم المسئول</label><select id="em_servant">
+      <option value="">— بدون خادم محدد —</option>
+      ${availableServants.map(u=>`<option value="${u.id}"${currentServant&&currentServant.id===u.id?' selected':''}>${u.name}</option>`).join('')}
+    </select></div>`:''}
+    ${isTheatreSvc?`
+    <div class="form-grid">
+      <div class="field"><label>الفئة</label><select id="em_category">
+        <option value="">— اختر —</option>
+        ${(svc.categories||[]).map(c=>`<option${m.categoryId===c?' selected':''}>${c}</option>`).join('')}
+      </select></div>
+      <div class="field"><label>القسم</label><select id="em_section">
+        <option value="">— اختر —</option>
+        ${(svc.sections||[]).map(c=>`<option${m.sectionId===c?' selected':''}>${c}</option>`).join('')}
+      </select></div>
+    </div>`:''}
+    <div class="modal-btns">
+      <button class="btn bp" id="em_save">✓ حفظ</button>
+      <button class="btn bw" onclick="closeModal()">إلغاء</button>
+    </div>`;
+
+  document.getElementById('em_save').onclick=async()=>{
+    let upd=Object.assign({},DB.members.find(x=>x.code===code)||{});
+    upd.name=getVal('em_name');
+    upd.phone=getVal('em_phone');
+    upd.grade=getVal('em_grade');
+    upd.father=getVal('em_father');
+    upd.addr=getVal('em_addr');
+    upd.dob=getVal('em_dob');
+    upd.notes=getVal('em_notes');
+    if(isTheatreSvc){upd.categoryId=getVal('em_category');upd.sectionId=getVal('em_section');}
+    let servantSel=document.getElementById('em_servant');
+    if(servantSel){
+      let sv=(DB.users||[]).find(u=>u.id===servantSel.value);
+      if(sv){upd.groupId=sv.groupId;upd.serviceId=sv.serviceId;}
+      else if(!servantSel.value){upd.groupId='';}
+    }
+    let idx=DB.members.findIndex(x=>x.code===code);
+    if(idx>=0)DB.members[idx]=upd;
+    logActivity('تعديل عضو: '+upd.name+' ('+code+')');
+    await saveDB({membersPatch:{upsert:[upd]}});
+    closeModal();renderMembersPage();
+  };
+  document.getElementById('memberModal').classList.add('on');
+}
+
+// ===== SERVICES PAGE =====
+function renderServicesPage(){
+  let area=document.getElementById('pagesArea');
+  area.innerHTML=`<div class="page">
+    <div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div class="card-title" style="margin-bottom:0">🏛 الخدمات</div>
+        <button class="btn bp" onclick="openAddService()">+ إضافة خدمة</button>
+      </div>
+      ${(DB.services||[]).length?`<div class="tbl-wrap"><table>
+        <thead><tr><th>الاسم</th><th>النوع</th><th>المسئول</th><th>الأعضاء</th><th></th></tr></thead>
+        <tbody>${(DB.services||[]).map(s=>{
+          let admin=(DB.users||[]).find(u=>u.serviceId===s.id&&u.role==='service_admin');
+          let cnt=(DB.members||[]).filter(m=>m.serviceId===s.id).length;
+          return`<tr>
+            <td style="font-weight:700">${s.name}</td>
+            <td><span class="tag ${s.type==='theatre'?'tag-o':'tag-p'}">${s.type==='theatre'?'مسرح':'عادية'}</span></td>
+            <td>${admin?admin.name:'—'}</td>
+            <td>${cnt}</td>
+            <td><button class="btn bw" style="font-size:10px;padding:3px 7px" onclick="editService('${s.id}')">✎</button></td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table></div>`:'<div style="text-align:center;color:var(--txm);padding:20px">لا يوجد خدمات بعد — أضف خدمة جديدة</div>'}
+    </div>
+  </div>`;
+}
+
+function openAddService(){
+  document.getElementById('memberModalBox').innerHTML=`
+    <div class="modal-title">➕ إضافة خدمة جديدة</div>
+    <div class="field"><label>اسم الخدمة *</label><input id="as_name" placeholder="مثال: إعدادي"></div>
+    <div class="field"><label>النوع</label><select id="as_type" onchange="document.getElementById('as_theatre').style.display=this.value==='theatre'?'':'none'">
+      <option value="regular">عادية (خدام + مجموعات)</option>
+      <option value="theatre">مسرح (فئات + أقسام)</option>
+    </select></div>
+    <div id="as_theatre" style="display:none">
+      <div class="field"><label>الفئات (مفصولة بفاصلة)</label><input id="as_cats" placeholder="ابتدائي،إعدادي،ثانوي،شباب" value="ابتدائي،إعدادي،ثانوي،شباب"></div>
+      <div class="field"><label>الأقسام (مفصولة بفاصلة)</label><input id="as_secs" placeholder="تمثيل،ديكور،إضاءة،إدارة" value="تمثيل،ديكور،إضاءة،إدارة"></div>
+    </div>
+    <div class="modal-btns">
+      <button class="btn bp" onclick="(async()=>{
+        let name=getVal('as_name').trim();
+        if(!name)return;
+        let type=getVal('as_type');
+        let svc={id:'srv_'+Date.now(),name,type};
+        if(type==='theatre'){
+          svc.categories=getVal('as_cats').split('،').map(x=>x.trim()).filter(Boolean);
+          svc.sections=getVal('as_secs').split('،').map(x=>x.trim()).filter(Boolean);
+        }
+        DB.services.push(svc);
+        await saveDB({servicesPatch:{upsert:[svc]}});
+        closeModal();renderServicesPage();
+      })()">✓ حفظ</button>
+      <button class="btn bw" onclick="closeModal()">إلغاء</button>
+    </div>`;
+  document.getElementById('memberModal').classList.add('on');
+}
+
+function editService(id){
+  let s=(DB.services||[]).find(x=>x.id===id);
+  if(!s)return;
+  document.getElementById('memberModalBox').innerHTML=`
+    <div class="modal-title">✎ تعديل: ${s.name}</div>
+    <div class="field"><label>الاسم</label><input id="es_name" value="${s.name}"></div>
+    ${s.type==='theatre'?`
+    <div class="field"><label>الفئات</label><input id="es_cats" value="${(s.categories||[]).join('،')}"></div>
+    <div class="field"><label>الأقسام</label><input id="es_secs" value="${(s.sections||[]).join('،')}"></div>`:''}
+    <div class="modal-btns">
+      <button class="btn bp" onclick="(async()=>{
+        let upd=Object.assign({},DB.services.find(x=>x.id==='${id}')||{});
+        upd.name=getVal('es_name');
+        if(upd.type==='theatre'){
+          upd.categories=getVal('es_cats').split('،').map(x=>x.trim()).filter(Boolean);
+          upd.sections=getVal('es_secs').split('،').map(x=>x.trim()).filter(Boolean);
+        }
+        let idx=DB.services.findIndex(x=>x.id==='${id}');
+        if(idx>=0)DB.services[idx]=upd;
+        await saveDB({servicesPatch:{upsert:[upd]}});
+        closeModal();renderServicesPage();
+      })()">✓ حفظ</button>
+      <button class="btn br" onclick="deleteService('${id}','${s.name}')">🗑 حذف</button>
+      <button class="btn bw" onclick="closeModal()">إلغاء</button>
+    </div>`;
+  document.getElementById('memberModal').classList.add('on');
+}
+
+async function deleteService(id, name){
+  closeModal();
+  showModal('حذف خدمة','حذف خدمة "'+name+'" نهائياً؟ سيتم حذف كل مستخدميها وأعضائها!','حذف',async()=>{
+    DB.services=DB.services.filter(x=>x.id!==id);
+    await saveDB({servicesPatch:{remove:[id]}});
+    renderServicesPage();
+  },'danger');
+}
+function renderUsersPage(){
+  let r=currentUser.role;
+  let users;
+  if(isSuperAdmin()){
+    users=(DB.users||[]).filter(u=>u.role!=='viewer');
+  } else if(isServiceAdmin()){
+    users=(DB.users||[]).filter(u=>u.serviceId===currentUser.serviceId&&u.role!=='viewer');
+  } else if(r==='section_admin'){
+    // مسئول القسم يشوف خدام مسرح قسمه بس
+    users=(DB.users||[]).filter(u=>(u.role==='servant'||u.role==='theatre_servant')&&u.serviceId===currentUser.serviceId&&u.sectionId===currentUser.sectionId);
+  } else if(r==='category_admin'){
+    // مسئول الفئة يشوف خدام مسرح فئتها بس
+    users=(DB.users||[]).filter(u=>(u.role==='servant'||u.role==='theatre_servant')&&u.serviceId===currentUser.serviceId&&u.categoryId===currentUser.categoryId);
+  } else if(r==='year_admin'){
+    // مسئول السنة يشوف خدام خدمته — مش مقيّد بالأعضاء الموجودين
+    users=(DB.users||[]).filter(u=>u.role==='servant'&&u.serviceId===currentUser.serviceId);
+  } else {
+    users=[];
+  }
+  let area=document.getElementById('pagesArea');
+  area.innerHTML=`<div class="page">
+    <div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div class="card-title" style="margin-bottom:0">👤 المستخدمون</div>
+        <button class="btn bp" onclick="openAddUser()">+ إضافة</button>
+      </div>
+      <div class="tbl-wrap"><table>
+        <thead><tr><th>الاسم</th><th>الدور</th><th>الخدمة</th><th></th></tr></thead>
+        <tbody>${users.map(u=>`<tr>
+          <td style="font-weight:700">${u.name}</td>
+          <td><span class="tag tag-p">${getRoleLabel(u.role)}</span></td>
+          <td>${getServiceName(u.serviceId)||'—'}</td>
+          <td><button class="btn bw" style="font-size:10px;padding:3px 7px" onclick="editUser('${u.id}')">✎</button></td>
+        </tr>`).join('')}</tbody>
+      </table></div>
+    </div>
+  </div>`;
+}
+
+function openAddUser(){
+  let r=currentUser.role;
+  let isServiceMgr=isServiceAdmin();
+  let svc=isServiceMgr?(DB.services||[]).find(s=>s.id===currentUser.serviceId):null;
+  let isTheatreMgr=isServiceMgr&&svc&&svc.type==='theatre';
+  let canAddYearAdmin=isServiceMgr&&svc&&svc.type==='regular'&&svc.name!=='شباب';
+
+  // مسئول السنة: يضيف خدام في سنته بس
+  if(r==='year_admin'){
+    document.getElementById('memberModalBox').innerHTML=`
+      <div class="modal-title">➕ إضافة خادم لسنة ${currentUser.year||''}</div>
+      <div class="form-grid">
+        <div class="field"><label>الاسم *</label><input id="au_name"></div>
+        <div class="field"><label>كلمة السر *</label><input type="password" id="au_pw"></div>
+      </div>
+      <div class="status-bar info" style="font-size:11px">خدمة: <strong>${getServiceName(currentUser.serviceId)}</strong> — سنة: <strong>${currentUser.year||''}</strong></div>
+      <div id="au_err" style="color:var(--r);font-size:11px;margin-bottom:8px"></div>
+      <div class="modal-btns">
+        <button class="btn bp" onclick="confirmAddUser()">✓ حفظ</button>
+        <button class="btn bw" onclick="closeModal()">إلغاء</button>
+      </div>`;
+    document.getElementById('memberModal').classList.add('on');
+    return;
+  }
+
+  // مسئول فئة/قسم: يضيف خادم مسرح في نطاقه بس
+  if(r==='section_admin'||r==='category_admin'){
+    let label=r==='section_admin'?`قسم ${currentUser.sectionId||''}`:`فئة ${currentUser.categoryId||''}`;
+    document.getElementById('memberModalBox').innerHTML=`
+      <div class="modal-title">➕ إضافة خادم مسرح</div>
+      <div class="form-grid">
+        <div class="field"><label>الاسم *</label><input id="au_name"></div>
+        <div class="field"><label>كلمة السر *</label><input type="password" id="au_pw"></div>
+      </div>
+      <div class="status-bar info" style="font-size:11px">خدمة: <strong>${getServiceName(currentUser.serviceId)}</strong> — ${label}</div>
+      <div id="au_err" style="color:var(--r);font-size:11px;margin-bottom:8px"></div>
+      <div class="modal-btns">
+        <button class="btn bp" onclick="confirmAddUser()">✓ حفظ</button>
+        <button class="btn bw" onclick="closeModal()">إلغاء</button>
+      </div>`;
+    document.getElementById('memberModal').classList.add('on');
+    return;
+  }
+
+  // المسئول العام والمراقب ومسئول الخدمة ومسئول المسرح
+  let rolesHtml=isSuperAdmin()
+    ?`<option value="servant">خادم</option>
+      <option value="servant">خادم مسرح</option>
+      <option value="service_admin">مسئول خدمة</option>
+      <option value="section_admin">مسئول قسم (مسرح)</option>
+      <option value="category_admin">مسئول فئة (مسرح)</option>
+      <option value="year_admin">مسئول سنة (فرعي)</option>
+      <option value="superadmin">مسئول عام</option>`
+    :isTheatreMgr
+      ?`<option value="servant">خادم مسرح</option>
+        <option value="section_admin">مسئول قسم</option>
+        <option value="category_admin">مسئول فئة</option>`
+      :`<option value="servant">خادم</option>
+        ${canAddYearAdmin?'<option value="year_admin">مسئول سنة (فرعي)</option>':''}`;
+
+  document.getElementById('memberModalBox').innerHTML=`
+    <div class="modal-title">➕ إضافة مستخدم جديد</div>
+    <div class="form-grid">
+      <div class="field"><label>الاسم *</label><input id="au_name"></div>
+      <div class="field"><label>كلمة السر *</label><input type="password" id="au_pw"></div>
+    </div>
+    <div class="field"><label>الدور</label><select id="au_role" onchange="updateUserFormFields()">${rolesHtml}</select></div>
+    <div id="au_extra"></div>
+    <div id="au_err" style="color:var(--r);font-size:11px;margin-bottom:8px"></div>
+    <div class="modal-btns">
+      <button class="btn bp" onclick="confirmAddUser()">✓ حفظ</button>
+      <button class="btn bw" onclick="closeModal()">إلغاء</button>
+    </div>`;
+  updateUserFormFields();
+  document.getElementById('memberModal').classList.add('on');
+}
+
+function updateUserFormFields(){
+  let role=getVal('au_role');
+  let extra=document.getElementById('au_extra');
+  if(!extra)return;
+  // مسئول الخدمة: له serviceId ومش مسئول عام
+  let isServiceMgr=isServiceAdmin()||(currentUser.serviceId&&!isSuperAdmin());
+  let svc=isServiceMgr?(DB.services||[]).find(s=>s.id===currentUser.serviceId):null;
+  if(role==='superadmin'){extra.innerHTML='';return;}
+  if(isServiceMgr){
+    if(role==='servant'){
+      extra.innerHTML=`<div class="status-bar info" style="font-size:11px">سيتم إضافة الخادم تلقائياً لخدمة: <strong>${getServiceName(currentUser.serviceId)}</strong></div>`;
+    } else if(role==='year_admin'){
+      let svcName=(getServiceName(currentUser.serviceId)||'').trim();
+      let grades;
+      if(svcName.includes('ابتدائي')){
+        grades=['الأولى ابتدائي','الثانية ابتدائي','الثالثة ابتدائي','الرابعة ابتدائي','الخامسة ابتدائي','السادسة ابتدائي'];
+      } else if(svcName.includes('إعدادي')||svcName.includes('اعدادي')){
+        grades=['الأولى إعدادي','الثانية إعدادي','الثالثة إعدادي'];
+      } else if(svcName.includes('ثانوي')){
+        grades=['الأولى ثانوي','الثانية ثانوي','الثالثة ثانوي'];
+      } else if(svcName.includes('شباب')||svcName.includes('جامعة')){
+        grades=['الأولى جامعة','الثانية جامعة','الثالثة جامعة','الرابعة جامعة','تخرج'];
+      } else {
+        grades=['الأولى إعدادي','الثانية إعدادي','الثالثة إعدادي','الأولى ثانوي','الثانية ثانوي','الثالثة ثانوي'];
+      }
+      extra.innerHTML=`
+        <div class="status-bar info" style="font-size:11px">خدمة: <strong>${svcName}</strong></div>
+        <div class="field"><label>السنة المسئول عنها *</label><select id="au_year">
+          <option value="">— اختر —</option>${grades.map(g=>`<option>${g}</option>`).join('')}
+        </select></div>`;
+    } else if(role==='section_admin'){
+      // مسئول المسرح يضيف مسئول قسم في خدمته تلقائياً
+      let svc=(DB.services||[]).find(s=>s.id===currentUser.serviceId);
+      extra.innerHTML=`
+        <div class="status-bar info" style="font-size:11px">خدمة: <strong>${getServiceName(currentUser.serviceId)}</strong></div>
+        <div class="field"><label>القسم المسئول عنه *</label><select id="au_section">
+          <option value="">— اختر —</option>${(svc&&svc.sections||[]).map(x=>`<option>${x}</option>`).join('')}
+        </select></div>`;
+    } else if(role==='category_admin'){
+      let svc=(DB.services||[]).find(s=>s.id===currentUser.serviceId);
+      extra.innerHTML=`
+        <div class="status-bar info" style="font-size:11px">خدمة: <strong>${getServiceName(currentUser.serviceId)}</strong></div>
+        <div class="field"><label>الفئة المسئولة عنها *</label><select id="au_category">
+          <option value="">— اختر —</option>${(svc&&svc.categories||[]).map(x=>`<option>${x}</option>`).join('')}
+        </select></div>`;
+    }
+    return;
+  }
+  // المسئول العام — اختيار كامل
+  let allowedServices=DB.services||[];
+  let servicesHtml=allowedServices.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
+  if(role==='servant'){
+    extra.innerHTML=`<div class="field"><label>الخدمة *</label><select id="au_service"><option value="">— اختر —</option>${servicesHtml}</select></div>`;
+    return;
+  }
+  if(role==='service_admin'){
+    extra.innerHTML=`<div class="field"><label>الخدمة المسئول عنها *</label><select id="au_service"><option value="">— اختر —</option>${servicesHtml}</select></div>`;
+    return;
+  }
+  if(role==='year_admin'){
+    let regularServices=(DB.services||[]).filter(s=>s.type==='regular'&&s.name!=='شباب');
+    extra.innerHTML=`
+      <div class="field"><label>الخدمة *</label><select id="au_service" onchange="updateYearAdminFields()">
+        <option value="">— اختر —</option>${regularServices.map(s=>`<option value="${s.id}">${s.name}</option>`).join('')}
+      </select></div>
+      <div id="au_year_wrap" style="display:none">
+        <div class="field"><label>السنة *</label><select id="au_year">
+          <option value="">— اختر —</option>
+          ${['الأولى إعدادي','الثانية إعدادي','الثالثة إعدادي','الأولى ثانوي','الثانية ثانوي','الثالثة ثانوي','الأولى جامعة','الثانية جامعة','الثالثة جامعة','الرابعة جامعة'].map(g=>`<option>${g}</option>`).join('')}
+        </select></div>
+      </div>`;
+    return;
+  }
+  if(role==='section_admin'){
+    let theatres=(DB.services||[]).filter(s=>s.type==='theatre');
+    if(!theatres.length){extra.innerHTML='<div class="status-bar warn">لا يوجد خدمات مسرح بعد</div>';return;}
+    extra.innerHTML=`
+      <div class="field"><label>خدمة المسرح *</label><select id="au_service" onchange="updateSectionFields()">
+        <option value="">— اختر —</option>${theatres.map(s=>`<option value="${s.id}">${s.name}</option>`).join('')}
+      </select></div>
+      <div id="au_section_wrap" style="display:none">
+        <div class="field"><label>القسم المسئول عنه *</label><select id="au_section"><option value="">— اختر —</option></select></div>
+      </div>`;
+    if(theatres.length===1){document.getElementById('au_service').value=theatres[0].id;setTimeout(updateSectionFields,50);}
+    return;
+  }
+  if(role==='category_admin'){
+    let theatres=(DB.services||[]).filter(s=>s.type==='theatre');
+    if(!theatres.length){extra.innerHTML='<div class="status-bar warn">لا يوجد خدمات مسرح بعد</div>';return;}
+    extra.innerHTML=`
+      <div class="field"><label>خدمة المسرح *</label><select id="au_service" onchange="updateCategoryFields()">
+        <option value="">— اختر —</option>${theatres.map(s=>`<option value="${s.id}">${s.name}</option>`).join('')}
+      </select></div>
+      <div id="au_category_wrap" style="display:none">
+        <div class="field"><label>الفئة المسئولة عنها *</label><select id="au_category"><option value="">— اختر —</option></select></div>
+      </div>`;
+    if(theatres.length===1){document.getElementById('au_service').value=theatres[0].id;setTimeout(updateCategoryFields,50);}
+    return;
+  }
+}
+
+function updateYearAdminFields(){
+  let wrap=document.getElementById('au_year_wrap');
+  if(wrap) wrap.style.display=getVal('au_service')?'':'none';
+}
+
+function updateSectionFields(){
+  let svcId=getVal('au_service');
+  let svc=(DB.services||[]).find(s=>s.id===svcId);
+  let wrap=document.getElementById('au_section_wrap');
+  if(!wrap)return;
+  if(svc&&svc.sections&&svc.sections.length){
+    wrap.style.display='';
+    document.getElementById('au_section').innerHTML='<option value="">— اختر —</option>'+(svc.sections||[]).map(x=>`<option>${x}</option>`).join('');
+  }else{wrap.style.display='none';}
+}
+
+function updateCategoryFields(){
+  let svcId=getVal('au_service');
+  let svc=(DB.services||[]).find(s=>s.id===svcId);
+  let wrap=document.getElementById('au_category_wrap');
+  if(!wrap)return;
+  if(svc&&svc.categories&&svc.categories.length){
+    wrap.style.display='';
+    document.getElementById('au_category').innerHTML='<option value="">— اختر —</option>'+(svc.categories||[]).map(x=>`<option>${x}</option>`).join('');
+  }else{wrap.style.display='none';}
+}
+
+async function confirmAddUser(){
+  let name=getVal('au_name').trim(),pw=getVal('au_pw').trim();
+  let err=document.getElementById('au_err');
+  if(!name){err.textContent='الاسم مطلوب';return;}
+  if(pw.length<3){err.textContent='كلمة السر على الأقل 3 أحرف';return;}
+  if(pw===VIEWER_PW){err.textContent='كلمة السر دي محجوزة';return;}
+  for(let u of (DB.users||[])){
+    if(await pwEquals(u.password,pw)){err.textContent='كلمة السر دي مستخدمة بالفعل';return;}
+  }
+  let curRole=currentUser.role;
+  let role,svcId,sectionId=null,categoryId=null,year=null,groupId=null;
+  if(curRole==='year_admin'){
+    role='servant';svcId=currentUser.serviceId;year=currentUser.year;groupId='g_yr_'+Date.now();
+  } else if(curRole==='category_admin'){
+    role='servant';svcId=currentUser.serviceId;categoryId=currentUser.categoryId;groupId='g_cat_'+Date.now();
+  } else if(curRole==='section_admin'){
+    role='servant';svcId=currentUser.serviceId;sectionId=currentUser.sectionId;groupId='g_sec_'+Date.now();
+  } else {
+    role=getVal('au_role');
+    svcId=isServiceAdmin()?currentUser.serviceId:(getVal('au_service')||null);
+    if(role!=='superadmin'&&!svcId){err.textContent='اختر الخدمة';return;}
+    sectionId=getVal('au_section')||null;
+    categoryId=getVal('au_category')||null;
+    year=getVal('au_year')||null;
+    if(role==='section_admin'&&!sectionId){err.textContent='اختر القسم';return;}
+    if(role==='category_admin'&&!categoryId){err.textContent='اختر الفئة';return;}
+    if(role==='year_admin'&&!year){err.textContent='اختر السنة الدراسية';return;}
+    groupId=role==='servant'?('g_'+Date.now()):
+             role==='section_admin'?('sec_'+sectionId+'_'+Date.now()):
+             role==='category_admin'?('cat_'+categoryId+'_'+Date.now()):
+             role==='year_admin'?('yr_'+Date.now()):null;
+  }
+  let newUser={id:'u_'+Date.now(),name,role,password:await hashPw(pw),serviceId:svcId,groupId,sectionId,categoryId,year};
+  DB.users.push(newUser);
+  logActivity('إضافة مستخدم: '+name+' ('+getRoleLabel(role)+')');
+  await saveDB({usersPatch:{upsert:[newUser]}});
+  closeModal();renderUsersPage();
+}
+
+function editUser(id){
+  let u=(DB.users||[]).find(x=>x.id===id);
+  if(!u)return;
+  document.getElementById('memberModalBox').innerHTML=`
+    <div class="modal-title">✎ تعديل: ${u.name}</div>
+    <div class="field"><label>الاسم</label><input id="eu_name" value="${u.name}"></div>
+    <div class="field"><label>كلمة السر الجديدة (اتركها فارغة للإبقاء)</label><input type="password" id="eu_pw"></div>
+    <div id="eu_err" style="color:var(--r);font-size:11px;margin-bottom:6px"></div>
+    <div class="modal-btns">
+      <button class="btn bp" id="eu_save_btn">✓ حفظ</button>
+      <button class="btn br" onclick="deleteUser('${u.id}','${u.name}')">🗑 حذف</button>
+      <button class="btn bw" onclick="closeModal()">إلغاء</button>
+    </div>`;
+  document.getElementById('eu_save_btn').onclick=async()=>{
+    let err=document.getElementById('eu_err');
+    let upd=Object.assign({},(DB.users||[]).find(x=>x.id==='${id}')||{});
+    upd.name=getVal('eu_name');
+    let newpw=getVal('eu_pw').trim();
+    if(newpw.length>=3){
+      if(newpw===VIEWER_PW){err.textContent='كلمة السر دي محجوزة';return;}
+      for(let uu of (DB.users||[])){
+        if(uu.id==='${id}')continue;
+        if(await pwEquals(uu.password,newpw)){err.textContent='كلمة السر دي مستخدمة بالفعل';return;}
+      }
+      upd.password=await hashPw(newpw);
+    }
+    let idx=(DB.users||[]).findIndex(x=>x.id==='${id}');
+    if(idx>=0)DB.users[idx]=upd;
+    logActivity('تعديل مستخدم: '+upd.name);
+    await saveDB({usersPatch:{upsert:[upd]}});
+    closeModal();renderUsersPage();
+  };
+  document.getElementById('memberModal').classList.add('on');
+}
+
+async function deleteUser(id, name){
+  closeModal();
+  showModal('حذف مستخدم','حذف "'+name+'" نهائياً؟','حذف',async()=>{
+    DB.users=DB.users.filter(x=>x.id!==id);
+    logActivity('حذف مستخدم: '+name);
+    await saveDB({usersPatch:{remove:[id]}});
+    renderUsersPage();
+  },'danger');
+}
+function renderReportsPage(){
+  let area=document.getElementById('pagesArea');
+  let tkey=todayKey();
+  let myMembers=getMyMembers();
+  let tabs=[
+    {id:'rpt_today',label:'اليوم'},
+    {id:'rpt_monthly',label:'الشهر'},
+    {id:'rpt_alerts',label:'⚠️ تنبيهات الغياب'},
+  ];
+  if(isServiceAdmin()||isSuperAdmin()) tabs.push({id:'rpt_fix',label:'🔧 تصحيح سجل'});
+  area.innerHTML=`<div class="page">
+    <div class="rpt-tabs" style="display:flex;gap:6px;margin-bottom:12px">
+      ${tabs.map((t,i)=>`<button class="btn ${i===0?'bp':'bw'}" id="rtab_${t.id}" onclick="switchRptTab('${t.id}')" style="font-size:11px">${t.label}</button>`).join('')}
+    </div>
+    <div id="rptContent"></div>
+  </div>`;
+  switchRptTab('rpt_today');
+}
+
+let _currentRptTab='rpt_today';
+function switchRptTab(id){
+  _currentRptTab=id;
+  document.querySelectorAll('[id^=rtab_]').forEach(b=>{b.className=b.id==='rtab_'+id?'btn bp':'btn bw';b.style.fontSize='11px';});
+  let c=document.getElementById('rptContent');if(!c)return;
+  if(id==='rpt_today') renderRptToday(c);
+  else if(id==='rpt_monthly') renderRptMonthly(c);
+  else if(id==='rpt_alerts') renderRptAlerts(c);
+  else if(id==='rpt_fix') renderRptFix(c);
+}
+
+function renderRptToday(container){
+  let tkey=todayKey();
+  let myMembers=getMyMembers();
+  let todayRecs=(DB.records||[]).filter(r=>r.date===tkey&&myMembers.find(m=>m.code===r.code));
+  let pr=todayRecs.filter(r=>r.status==='حاضر').length;
+  let ab=todayRecs.filter(r=>r.status==='غائب').length;
+  container.innerHTML=`
+    <div class="stats-row" style="margin-bottom:12px">
+      <div class="stat-box"><div class="stat-val">${pr+ab}</div><div class="stat-lbl">إجمالي</div></div>
+      <div class="stat-box"><div class="stat-val" style="color:var(--g)">${pr}</div><div class="stat-lbl">حاضر</div></div>
+      <div class="stat-box"><div class="stat-val" style="color:var(--r)">${ab}</div><div class="stat-lbl">غائب</div></div>
+      <div class="stat-box"><div class="stat-val">${pr+ab?Math.round(pr/(pr+ab)*100):0}%</div><div class="stat-lbl">نسبة الحضور</div></div>
+    </div>
+    <div class="card">
+      <div class="card-title">📋 سجل ${tkey}</div>
+      ${todayRecs.length?`<div class="tbl-wrap"><table>
+        <thead><tr><th>الكود</th><th>الاسم</th><th>الحالة</th><th>الوقت</th></tr></thead>
+        <tbody>${todayRecs.map(r=>`<tr>
+          <td>${r.code}</td><td style="font-weight:700">${r.name}</td>
+          <td><span class="tag ${r.status==='حاضر'?'tag-g':'tag-r'}">${r.status}</span></td>
+          <td>${r.time||'—'}</td>
+        </tr>`).join('')}</tbody>
+      </table></div>`:'<div style="text-align:center;color:var(--txm);padding:20px">لا يوجد سجلات لهذا اليوم بعد</div>'}
+    </div>`;
+}
+
+function renderRptMonthly(container){
+  let now=new Date();
+  let firstDay=fmtDateKey(new Date(now.getFullYear(),now.getMonth(),1));
+  let myMembers=getMyMembers();
+  let monthRecs=(DB.records||[]).filter(r=>r.date>=firstDay&&myMembers.find(m=>m.code===r.code));
+  let days=[...new Set(monthRecs.map(r=>r.date))].sort();
+  container.innerHTML=`<div class="card">
+    <div class="card-title">📅 تقرير الشهر الحالي (${days.length} يوم)</div>
+    ${days.length?`<div class="tbl-wrap"><table>
+      <thead><tr><th>التاريخ</th><th>حاضر</th><th>غائب</th><th>%</th></tr></thead>
+      <tbody>${days.map(d=>{
+        let recs=monthRecs.filter(r=>r.date===d);
+        let pr=recs.filter(r=>r.status==='حاضر').length;
+        let ab=recs.filter(r=>r.status==='غائب').length;
+        return`<tr><td>${d}</td><td style="color:var(--g);font-weight:700">${pr}</td><td style="color:var(--r)">${ab}</td><td>${pr+ab?Math.round(pr/(pr+ab)*100):0}%</td></tr>`;
+      }).join('')}</tbody>
+    </table></div>`:'<div style="text-align:center;color:var(--txm);padding:20px">لا يوجد سجلات هذا الشهر</div>'}
+  </div>`;
+}
+
+function renderRptAlerts(container){
+  let myMembers=getMyMembers();
+  let thresh=3; // حد الغياب المتتالي
+
+  // بناء خريطة السجلات لكل عضو مرتبة من الأحدث للأقدم
+  let recMap={};
+  (DB.records||[]).forEach(r=>{
+    if(!recMap[r.code])recMap[r.code]=[];
+    recMap[r.code].push(r);
+  });
+  Object.keys(recMap).forEach(code=>{
+    recMap[code].sort((a,b)=>b.date.localeCompare(a.date));
+  });
+
+  // حساب الغياب المتتالي لكل عضو
+  let alerts=[];
+  myMembers.forEach(m=>{
+    let recs=recMap[m.code]||[];
+    let count=0,lastPresent='';
+    for(let r of recs){
+      if(r.status==='غائب') count++;
+      else{lastPresent=r.date;break;}
+    }
+    if(count>=thresh){
+      alerts.push({m,count,lastPresent,phone:m.phone||''});
+    }
+  });
+  alerts.sort((a,b)=>b.count-a.count);
+
+  container.innerHTML=`<div class="card">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <div class="card-title" style="margin-bottom:0">⚠️ تنبيهات الغياب المتتالي</div>
+      <div style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--txm)">
+        الحد:
+        <select onchange="document.getElementById('alertThresh').textContent=this.value;renderRptAlerts(document.getElementById('rptContent'))" style="padding:3px 6px;border:1px solid var(--bd);border-radius:5px;font-size:11px">
+          ${[2,3,4,5,6].map(n=>`<option value="${n}"${n===thresh?' selected':''}>${n} مرات</option>`).join('')}
+        </select>
+      </div>
+    </div>
+    ${alerts.length?`
+    <div style="margin-bottom:8px;font-size:11px;color:var(--r);font-weight:700">${alerts.length} عضو غائب ${thresh}+ مرات متتالية</div>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th>#</th><th>الاسم</th><th>الكود</th><th>غياب متتالي</th><th>آخر حضور</th><th>تواصل</th></tr></thead>
+      <tbody>${alerts.map((a,i)=>`<tr>
+        <td style="color:var(--txm)">${i+1}</td>
+        <td style="font-weight:700">${a.m.name}</td>
+        <td><span class="tag tag-p">${a.m.code}</span></td>
+        <td><span class="tag tag-r">${a.count} مرة</span></td>
+        <td style="color:var(--txm);font-size:11px">${a.lastPresent||'لم يحضر من قبل'}</td>
+        <td>${a.phone?`<a href="https://wa.me/2${a.phone.replace(/^0/,'')}" target="_blank" class="btn bg" style="font-size:10px;padding:3px 8px;text-decoration:none">واتساب</a>`:'—'}</td>
+      </tr>`).join('')}</tbody>
+    </table></div>`
+    :'<div style="text-align:center;color:var(--g);font-weight:700;padding:20px">✓ لا يوجد غياب متتالي يتجاوز '+thresh+' مرات</div>'}
+  </div>`;
+}
+
+function renderRptFix(container){
+  let myMembers=getMyMembers();
+  let days=[...new Set((DB.records||[]).filter(r=>myMembers.find(m=>m.code===r.code)).map(r=>r.date))].sort().reverse().slice(0,30);
+  container.innerHTML=`<div class="card">
+    <div class="card-title">🔧 تصحيح سجل منسي</div>
+    <div style="font-size:11px;color:var(--txm);margin-bottom:10px">لتصحيح حالة عضو في يوم مغلق سبق تسجيله</div>
+    <div class="form-grid">
+      <div class="field"><label>التاريخ</label><select id="fix_date">
+        ${days.map(d=>`<option value="${d}">${d}</option>`).join('')}
+      </select></div>
+      <div class="field"><label>العضو</label><select id="fix_member">
+        <option value="">— اختر —</option>
+        ${myMembers.map(m=>`<option value="${m.code}">${m.name} (${m.code})</option>`).join('')}
+      </select></div>
+    </div>
+    <button class="btn bp" onclick="fixRecord()" style="margin-bottom:8px">عرض السجل</button>
+    <div id="fix_result"></div>
+  </div>`;
+}
+
+async function fixRecord(){
+  let date=getVal('fix_date'),code=getVal('fix_member');
+  let res=document.getElementById('fix_result');
+  if(!date||!code){res.innerHTML='<div class="status-bar err">اختر التاريخ والعضو</div>';return;}
+  let rec=(DB.records||[]).find(r=>r.code===code&&r.date===date);
+  let member=(DB.members||[]).find(m=>m.code===code);
+  if(!rec){res.innerHTML='<div class="status-bar err">لا يوجد سجل لهذا العضو في هذا التاريخ</div>';return;}
+  let isPresent=rec.status==='حاضر';
+  let newStatus=isPresent?'غائب':'حاضر';
+  res.innerHTML='<div class="status-bar '+(isPresent?'ok':'err')+'">'
+    +'السجل الحالي: <strong>'+rec.status+'</strong> — '+(rec.time||'—')+'<br><br>'
+    +'<button class="btn '+(isPresent?'br':'bg')+'" id="fixBtn">تغيير لـ '+newStatus+'</button>'
+    +'</div>';
+  document.getElementById('fixBtn').onclick=async()=>{
+    let r=(DB.records||[]).find(x=>x.code===code&&x.date===date);
+    if(r){
+      r.status=newStatus;
+      r.time=newStatus==='حاضر'?nowT():'—';
+      r.fixedBy=currentUser?currentUser.name:'';
+    }
+    logActivity('تصحيح سجل: '+(member?member.name:code)+' — '+date+' — حالة جديدة: '+newStatus);
+    await saveDB({recordsPatch:{upsert:[r]}});
+    fixRecord();
+  };
+}
+
+
+function downloadCSVTemplate(){
+  let svcId=currentUser.serviceId;
+  let svc=(DB.services||[]).find(s=>s.id===svcId);
+  let isTheatre=svc&&svc.type==='theatre'||(currentUser.sectionId||currentUser.categoryId);
+  let headers,example1,example2;
+  if(isTheatre){
+    headers=['الاسم','التليفون','السنة','أب الاعتراف','العنوان','تاريخ الميلاد','ملاحظات','اسم الخادم','القسم','الفئة'];
+    example1=['مثال: ماريو كمال','01011111111','الأولى إعدادي','القس بطرس','عين شمس','2012-05-10','','خادم تمثيل إعدادي','تمثيل','إعدادي'];
+    example2=['مثال: سارة نبيل','','الثانية ثانوي','','','','','','ديكور','ثانوي'];
+  } else {
+    headers=['الاسم','التليفون','السنة','أب الاعتراف','العنوان','تاريخ الميلاد','ملاحظات','اسم الخادم'];
+    example1=['مثال: بطرس ميشيل','01022222222','الأولى إعدادي','القس مرقس','المطرية','2012-03-15','','خادم إعدادي أ'];
+    example2=['مثال: مريم وليم','','الثانية إعدادي','','','','ملاحظة','خادم إعدادي أ'];
+  }
+  let csv='\uFEFF'+headers.join(',')+'\n'+example1.join(',')+'\n'+example2.join(',');
+  let b=new Blob([csv],{type:'text/csv;charset=utf-8'});
+  let a=document.createElement('a');
+  a.href=URL.createObjectURL(b);
+  a.download='نموذج_تكويد'+(isTheatre?'_مسرح':'_عادي')+'.csv';
+  a.click();
+}
+
+// ===== استيراد CSV =====
+function importMembersCSV(input){
+  let f=input.files[0];if(!f)return;
+  let ext=f.name.split('.').pop().toLowerCase();
+  if(ext==='csv'){
+    let r=new FileReader();
+    r.onload=e=>parseImportCSV(e.target.result);
+    r.readAsText(f,'UTF-8');
+  } else {
+    let r=new FileReader();
+    r.onload=e=>{
+      try{
+        let data=new Uint8Array(e.target.result);
+        let wb=XLSX.read(data,{type:'array'});
+        let ws=wb.Sheets[wb.SheetNames[0]];
+        let csv=XLSX.utils.sheet_to_csv(ws);
+        parseImportCSV(csv);
+      }catch(err){
+        showModal('خطأ','تعذّر قراءة الملف — جرّب حفظه كـ CSV أولاً','حسناً',null);
+      }
+    };
+    r.readAsArrayBuffer(f);
+  }
+  input.value='';
+}
+
+function parseImportCSV(text){
+  let sep=text.includes('\t')?'\t':',';
+  let lines=text.replace(/\r/g,'').split('\n').filter(l=>l.trim());
+  if(lines.length<2){showModal('خطأ','الملف فارغ أو ليس له رأس','حسناً',null);return;}
+  let headers=lines[0].split(sep).map(h=>h.trim().replace(/^"|"$/g,'').toLowerCase());
+  let colIdx=(names)=>{for(let n of names){let i=headers.indexOf(n);if(i>=0)return i;}return -1;};
+  let ci={
+    name:colIdx(['name','الاسم']),
+    phone:colIdx(['phone','تليفون','التليفون']),
+    grade:colIdx(['grade','السنة','سنة']),
+    father:colIdx(['father','اب الاعتراف','أب الاعتراف']),
+    addr:colIdx(['addr','address','العنوان']),
+    dob:colIdx(['dob','تاريخ الميلاد']),
+    notes:colIdx(['notes','ملاحظات']),
+    servantName:colIdx(['servantname','servant','الخادم','اسم الخادم']),
+    sectionName:colIdx(['sectionname','section','القسم']),
+    categoryName:colIdx(['categoryname','category','الفئة']),
+  };
+  if(ci.name<0){showModal('خطأ','عمود "name" أو "الاسم" غير موجود','حسناً',null);return;}
+
+  let svcId=currentUser.serviceId||'';
+  let svc=(DB.services||[]).find(s=>s.id===svcId)||null;
+  let isTheatreSvc=svc?svc.type==='theatre':(currentUser.sectionId||currentUser.categoryId)?true:false;
+  let valid=[],rejected=[];
+
+  lines.slice(1).map(l=>l.split(sep).map(c=>c.trim().replace(/^"|"$/g,''))).filter(r=>r[ci.name]&&r[ci.name].trim()).forEach(row=>{
+    let get=(i)=>i>=0?row[i]||'':'';
+    let name=get(ci.name).trim();if(!name)return;
+    let servant=null;
+    let servantRaw=get(ci.servantName).trim();
+    if(isServant()){servant=currentUser;}
+    else if(servantRaw){
+      servant=(DB.users||[]).find(u=>u.role==='servant'&&u.name.trim().replace(/\s+/g,' ')===servantRaw.replace(/\s+/g,' ')&&(!svcId||u.serviceId===svcId));
+      if(!servant){rejected.push({name,reason:'الخادم "'+servantRaw+'" غير موجود'});return;}
+    }
+    let sectionId=currentUser.sectionId||'';
+    let categoryId=currentUser.categoryId||'';
+    if(isTheatreSvc){
+      let sectionRaw=get(ci.sectionName).trim();
+      let categoryRaw=get(ci.categoryName).trim();
+      if(servant){sectionId=servant.sectionId||sectionId;categoryId=servant.categoryId||categoryId;}
+      if(sectionRaw)sectionId=sectionRaw;
+      if(categoryRaw)categoryId=categoryRaw;
+    }
+    valid.push({name,phone:get(ci.phone),grade:get(ci.grade),father:get(ci.father),addr:get(ci.addr),dob:get(ci.dob),notes:get(ci.notes),
+      serviceId:servant?servant.serviceId:svcId,groupId:servant?servant.groupId:'',sectionId,categoryId,_sd:servant?servant.name:'—'});
+  });
+
+  if(!valid.length&&!rejected.length){showModal('خطأ','لا توجد بيانات صالحة','حسناً',null);return;}
+
+  let tbl=`<div class="tbl-wrap" style="max-height:180px;margin-bottom:10px"><table>
+    <thead><tr><th>الاسم</th><th>السنة</th><th>الخادم</th></tr></thead>
+    <tbody>${valid.slice(0,5).map(m=>`<tr><td style="font-weight:700">${m.name}</td><td>${m.grade||'—'}</td><td>${m._sd}</td></tr>`).join('')}
+    ${valid.length>5?`<tr><td colspan="3" style="text-align:center;color:var(--txm)">... و ${valid.length-5} آخرين</td></tr>`:''}
+    </tbody></table></div>`;
+
+  if(rejected.length)tbl+=`<div class="status-bar err" style="margin-bottom:8px">⚠ رُفض ${rejected.length}:<br>${rejected.slice(0,3).map(r=>'• '+r.name+' — '+r.reason).join('<br>')}</div>`;
+
+  document.getElementById('memberModalBox').innerHTML=`
+    <div class="modal-title">📥 استيراد CSV — معاينة</div>
+    <div style="font-size:12px;color:var(--txm);margin-bottom:8px">${valid.length} عضو جاهز</div>
+    ${tbl}
+    <div id="_importData" style="display:none">${encodeURIComponent(JSON.stringify(valid))}</div>
+    <div class="modal-btns">
+      <button class="btn bp" onclick="confirmImportMembers()">✓ استيراد ${valid.length} عضو</button>
+      <button class="btn bw" onclick="closeModal()">إلغاء</button>
+    </div>`;
+  document.getElementById('memberModal').classList.add('on');
+}
+
+async function confirmImportMembers(){
+  let el=document.getElementById('_importData');
+  if(!el)return;
+  let valid=JSON.parse(decodeURIComponent(el.textContent));
+  let added=valid.map(m=>{let nm={code:nextCode(),...m};delete nm._sd;return nm;});
+  added.forEach(m=>DB.members.push(m));
+  logActivity('استيراد CSV: '+added.length+' عضو');
+  await saveDB({membersPatch:{upsert:added}});
+  closeModal();
+  showModal('تم','تم استيراد '+added.length+' عضو بنجاح','حسناً',()=>renderMembersPage(),'ok');
+}
+
+// ===== SETTINGS PAGE =====
+function renderSettingsPage(){
+  let area=document.getElementById('pagesArea');
+  area.innerHTML=`<div class="page">
+    <div class="card">
+      <div class="card-title">⚙️ إعدادات النظام</div>
+      <div class="field"><label>اسم الكنيسة</label>
+        <div style="display:flex;gap:8px">
+          <input id="churchNameInput" value="${DB.churchName||''}" style="flex:1">
+          <button class="btn bp" onclick="(async()=>{DB.churchName=getVal('churchNameInput');await saveDB({churchName:DB.churchName});document.getElementById('churchNameLabel').textContent=DB.churchName;})()">حفظ</button>
+        </div>
+      </div>
+      <hr class="section-sep">
+      <div class="field"><label>تغيير كلمة سر المسئول العام</label></div>
+      <div class="form-grid">
+        <div class="field"><label>الحالية</label><input type="password" id="adOld"></div>
+        <div class="field"><label>الجديدة</label><input type="password" id="adNew"></div>
+      </div>
+      <button class="btn bp" onclick="changeAdminPw()">✓ تغيير</button>
+      <div id="pwMsg" style="font-size:11px;font-weight:700;margin-top:6px"></div>
+      <hr class="section-sep">
+      <div style="font-size:11px;font-weight:700;color:var(--r);margin-bottom:6px">⚠️ مسح بيانات الحضور</div>
+      <button class="btn br" onclick="clearAllData()">🗑 مسح كل بيانات الحضور</button>
+    </div>
+    <div class="card">
+      <div class="card-title">💾 نسخة احتياطية</div>
+      <div style="display:flex;gap:8px">
+        <button class="btn bp" onclick="exportBackup()">⬇️ تصدير</button>
+        <label class="btn bg" style="cursor:pointer">⬆️ استيراد<input type="file" accept=".json" style="display:none" onchange="importBackup(this)"></label>
+      </div>
+    </div>
+  </div>`;
+}
+
+async function changeAdminPw(){
+  let old=getVal('adOld'),nw=getVal('adNew');
+  let msg=document.getElementById('pwMsg');
+  let admin=(DB.users||[]).find(u=>u.role==='superadmin');
+  if(!admin||!(await pwEquals(admin.password,old))){msg.style.color='var(--r)';msg.textContent='كلمة السر الحالية غلط';return;}
+  if(nw.length<3){msg.style.color='var(--r)';msg.textContent='كلمة السر الجديدة قصيرة جداً';return;}
+  admin.password=await hashPw(nw);
+  await saveDB({usersPatch:{upsert:[admin]}});
+  msg.style.color='var(--g)';msg.textContent='✓ تم التغيير بنجاح';
+}
+
+function clearAllData(){
+  showModal('تحذير','مسح كل سجلات الحضور نهائياً؟','امسح',async()=>{
+    DB.records=[];DB.todayAtt={};DB.todayDate='';DB.closedGroups={};delete DB.closedDate;_localAtt={};
+    await saveDB({skipArrMerge:true,skipAttMerge:true});
+    renderCurrentPage();
+  },'danger');
+}
+
+function exportBackup(){
+  let b=new Blob([JSON.stringify(DB,null,2)],{type:'application/json'});
+  let a=document.createElement('a');a.href=URL.createObjectURL(b);
+  a.download='backup_'+todayKey()+'.json';a.click();
+}
+
+function importBackup(input){
+  let f=input.files[0];if(!f)return;
+  let r=new FileReader();
+  r.onload=async e=>{
+    try{
+      let d=JSON.parse(e.target.result);
+      DB=fixDB(d);await saveDB({skipArrMerge:true,skipAttMerge:true});
+      showModal('تم','تم استيراد النسخة الاحتياطية بنجاح','حسناً',()=>renderCurrentPage(),'ok');
+    }catch(err){showModal('خطأ','الملف غير صحيح','حسناً',null);}
+  };r.readAsText(f);
+}
+
+function openChangeMyPw(){
+  document.getElementById('memberModalBox').innerHTML=`
+    <div class="modal-title">🔑 تغيير كلمة سري</div>
+    <div class="field"><label>الحالية</label><input type="password" id="myOld"></div>
+    <div class="field"><label>الجديدة</label><input type="password" id="myNew"></div>
+    <div id="myPwErr" style="color:var(--r);font-size:11px;margin-bottom:8px"></div>
+    <div class="modal-btns">
+      <button class="btn bp" onclick="(async()=>{
+        let old=getVal('myOld'),nw=getVal('myNew').trim();
+        let em=document.getElementById('myPwErr');
+        if(!(await pwEquals(currentUser.password,old))){em.textContent='كلمة السر الحالية غلط';return;}
+        if(nw.length<3){em.textContent='كلمة السر قصيرة جداً';return;}
+        currentUser.password=await hashPw(nw);
+        await saveDB({usersPatch:{upsert:[currentUser]}});
+        try{sessionStorage.setItem('cu_pw',nw);}catch(e){}
+        closeModal();showModal('تم','تم تغيير كلمة السر بنجاح','حسناً',null,'ok');
+      })()">✓ حفظ</button>
+      <button class="btn bw" onclick="closeModal()">إلغاء</button>
+    </div>`;
+  document.getElementById('memberModal').classList.add('on');
+}
+
+// ===== OFFLINE =====
+function updateOfflineBanner(){
+  let b=document.getElementById('offlineBanner');
+  if(b)b.className='offline-banner'+(navigator.onLine?'':' show');
+}
+window.addEventListener('online',updateOfflineBanner);
+window.addEventListener('offline',updateOfflineBanner);
+
+// ===== INIT =====
+function hideLoading(){
+  let lo=document.getElementById('loadingOverlay');
+  if(lo){lo.classList.add('hidden');lo.style.display='none';}
+}
+
+window.addEventListener('load',async()=>{
+  updateOfflineBanner();
+  try{
+    document.getElementById('loadingMsg').textContent='جاري التحميل...';
+    await loadDB();
+  }catch(e){
+    DB=fixDB(lload()||JSON.parse(JSON.stringify(DEF)));
+  }finally{
+    hideLoading();
+    try{
+      let sid=sessionStorage.getItem('cu_id'),spw=sessionStorage.getItem('cu_pw');
+      if(sid&&spw&&DB){
+        let u=(DB.users||[]).find(x=>x.id===sid);
+        if(u){currentUser=u;document.getElementById('pwInput').value=spw;await doLogin();return;}
+      }
+    }catch(e){}
+    document.getElementById('loginScreen').classList.remove('hidden');
+  }
+});
+</script>
+</body>
+</html>
