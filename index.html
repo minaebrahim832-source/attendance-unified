@@ -2911,8 +2911,9 @@ function renderRptFollowup(container){
   let recMap={};
   (DB.records||[]).forEach(r=>{if(!recMap[r.code])recMap[r.code]=[];recMap[r.code].push(r);});
   Object.keys(recMap).forEach(code=>recMap[code].sort((a,b)=>b.date.localeCompare(a.date)));
-  let need=[];
   let myCodes=new Set(myMembers.map(m=>m.code));
+  // اقتراح بسبب الغياب (مؤشر مساعد فقط — مش شرط للافتقاد)
+  let suggested=[];
   myMembers.forEach(m=>{
     let recs=recMap[m.code]||[];
     let count=0,streakStart=null;
@@ -2920,20 +2921,33 @@ function renderRptFollowup(container){
     if(count>=_alertThresh){
       let fu=lastFollowUpFor(m.code);
       let fuRelevant=!!(fu&&streakStart&&fu.ts>=parseDateKey(streakStart).getTime());
-      need.push({m,count,fu,fuRelevant});
+      suggested.push({m,count,fu,fuRelevant});
     }
   });
-  let done=need.filter(x=>x.fuRelevant),notDone=need.filter(x=>!x.fuRelevant);
-  let recent=(DB.followUps||[]).filter(f=>myMembers.find(m=>m.code===f.code)).sort((a,b)=>b.ts-a.ts).slice(0,20);
+  let notDone=suggested.filter(x=>!x.fuRelevant);
+  let allFu=(DB.followUps||[]).filter(f=>myCodes.has(f.code)).sort((a,b)=>b.ts-a.ts);
+  let recent=allFu.slice(0,30);
+  // إحصائية: كام عضو مختلف اتفتقد
+  let uniqueVisited=new Set(allFu.map(f=>f.code)).size;
   container.innerHTML=`
     <div class="stats-row" style="margin-bottom:12px">
-      <div class="stat-box"><div class="stat-val">${need.length}</div><div class="stat-lbl">محتاجين افتقاد</div></div>
-      <div class="stat-box"><div class="stat-val" style="color:var(--g)">${done.length}</div><div class="stat-lbl">اتفتقدوا</div></div>
-      <div class="stat-box"><div class="stat-val" style="color:var(--r)">${notDone.length}</div><div class="stat-lbl">لسه</div></div>
-      <div class="stat-box"><div class="stat-val">${(DB.followUps||[]).filter(f=>myCodes.has(f.code)).length}</div><div class="stat-lbl">إجمالي الافتقادات</div></div>
+      <div class="stat-box"><div class="stat-val">${allFu.length}</div><div class="stat-lbl">إجمالي الافتقادات</div></div>
+      <div class="stat-box"><div class="stat-val" style="color:var(--g)">${uniqueVisited}</div><div class="stat-lbl">عضو اتفتقد</div></div>
+      <div class="stat-box"><div class="stat-val" style="color:var(--o)">${notDone.length}</div><div class="stat-lbl">غايبين محتاجين متابعة</div></div>
+      <div class="stat-box"><div class="stat-val">${myMembers.length}</div><div class="stat-lbl">إجمالي الأعضاء</div></div>
+    </div>
+    <div class="card">
+      <div class="card-title">➕ سجّل افتقاد لأي عضو</div>
+      <div style="font-size:11px;color:var(--txm);margin-bottom:8px">الافتقاد رعاية مستمرة — تقدر تسجّل مكالمة أو زيارة لأي عضو في أي وقت، سواء حضر أو غاب</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <input id="fuPickSearch" placeholder="🔍 اكتب اسم العضو..." list="fuPickList" style="flex:1;min-width:180px;padding:8px 10px;border:1.5px solid var(--bd);border-radius:7px;font-size:12px">
+        <datalist id="fuPickList">${myMembers.map(m=>`<option value="${(m.name||'').replace(/"/g,'&quot;')} — ${m.code}"></option>`).join('')}</datalist>
+        <button class="btn bp" style="font-size:12px" onclick="fuPickAndOpen()">📞 تسجيل افتقاد</button>
+      </div>
     </div>
     ${notDone.length?`<div class="card">
-      <div class="card-title" style="color:var(--r)">🔴 غايبين ومحدش افتقدهم لسه (${notDone.length})</div>
+      <div class="card-title" style="color:var(--o)">💡 مقترحون للافتقاد (غياب متتالي ${_alertThresh}+ مرات)</div>
+      <div style="font-size:11px;color:var(--txm);margin-bottom:6px">اقتراح مساعد — مش إلزام؛ ممكن تفتقد أي حد غيرهم برضو</div>
       <div class="tbl-wrap"><table>
         <thead><tr><th>الاسم</th><th>الخادم</th><th>غياب</th><th></th></tr></thead>
         <tbody>${notDone.map(x=>`<tr>
@@ -2944,7 +2958,7 @@ function renderRptFollowup(container){
         </tr>`).join('')}</tbody></table></div>
     </div>`:''}
     <div class="card">
-      <div class="card-title">📝 آخر الافتقادات المسجلة</div>
+      <div class="card-title">📝 آخر الافتقادات المسجلة (${allFu.length})</div>
       ${recent.length?`<div class="tbl-wrap"><table>
         <thead><tr><th>التاريخ</th><th>العضو</th><th>النوع</th><th>النتيجة</th><th>بواسطة</th></tr></thead>
         <tbody>${recent.map(f=>{
@@ -2956,8 +2970,24 @@ function renderRptFollowup(container){
             <td style="font-size:11px">${f.note||'—'}</td>
             <td style="font-size:11px;color:var(--txm)">${f.by}</td>
           </tr>`;}).join('')}</tbody></table></div>`
-      :'<div style="text-align:center;color:var(--txm);padding:14px">لا يوجد افتقادات مسجلة بعد</div>'}
+      :'<div style="text-align:center;color:var(--txm);padding:14px">لا يوجد افتقادات مسجلة بعد — ابدأ بتسجيل افتقاد من فوق</div>'}
     </div>`;
+}
+// اختيار عضو من البحث الحر وفتح نافذة الافتقاد
+function fuPickAndOpen(){
+  let v=(getVal('fuPickSearch')||'').trim();
+  if(!v){toast('اكتب اسم العضو الأول','warn',true);return;}
+  // الصيغة: "الاسم — الكود" — نستخرج الكود
+  let code=null;
+  let m=v.match(/—\s*(M\d+)\s*$/i);
+  if(m)code=m[1];
+  if(!code){
+    // بحث بالاسم في نطاق الخادم
+    let found=getMyMembers().find(x=>(x.name||'').trim()===v.trim());
+    if(found)code=found.code;
+  }
+  if(!code){toast('اختر العضو من القائمة','warn',true);return;}
+  openFollowUp(code);
 }
 </script>
 
@@ -4036,11 +4066,98 @@ function openFamilyProfile(code){
       </tr>`).join('')}</tbody></table></div>`
     :'<div style="font-size:11px;color:var(--txm);margin-bottom:10px">لا يوجد أولاد مسجلين</div>'}
     ${m.notes?`<div class="pg-item" style="margin-bottom:10px"><div class="pg-l">ملاحظات</div><div class="pg-v">${m.notes}</div></div>`:''}
+    <div class="card-title" style="font-size:12px">📞 الافتقاد (${(DB.followUps||[]).filter(f=>f.code===m.code).length}) <button class="btn bg" style="font-size:10px;padding:3px 8px;margin-right:6px" onclick="openFollowUp('${m.code}')">+ تسجيل افتقاد</button></div>
+    ${(function(){
+      let fups=(DB.followUps||[]).filter(f=>f.code===m.code).sort((a,b)=>b.ts-a.ts).slice(0,10);
+      return fups.length?`<div class="tbl-wrap" style="max-height:150px;margin-bottom:10px"><table>
+        <thead><tr><th>التاريخ</th><th>النوع</th><th>النتيجة</th><th>بواسطة</th></tr></thead>
+        <tbody>${fups.map(f=>`<tr>
+          <td style="font-size:11px">${new Date(f.ts).toLocaleDateString('ar-EG')}</td>
+          <td><span class="tag tag-p">${f.typ}</span></td>
+          <td style="font-size:11px">${f.note||'—'}</td>
+          <td style="font-size:11px;color:var(--txm)">${f.by}</td>
+        </tr>`).join('')}</tbody></table></div>`
+      :'<div style="font-size:11px;color:var(--txm);margin-bottom:10px">لم يتم تسجيل افتقاد بعد</div>';
+    })()}
     <div class="modal-btns">
       <button class="btn bw" onclick="closeModal();editMember('${m.code}')">✎ تعديل</button>
       <button class="btn bw" onclick="closeModal()">إغلاق</button>
     </div>`;
   document.getElementById('memberModal').classList.add('on');
+}
+
+// ===== فلتر سنين الزواج (خدمة الأسر) — بحث بالبيوت =====
+const _origRenderMembersPage=renderMembersPage;
+renderMembersPage=function(){
+  _origRenderMembersPage();
+  let inFamily=isFamilyServiceId(currentUser.serviceId)||(isSuperAdmin()&&getMembersPageList().some(m=>m.isFamily));
+  if(!inFamily)return;
+  let searchField=document.getElementById('memberSearch');
+  if(!searchField)return;
+  let wrap=searchField.closest('.field');
+  if(!wrap)return;
+  let famBox=document.createElement('div');
+  famBox.style.cssText='display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:8px;background:var(--pl);border-radius:7px;padding:7px 9px';
+  famBox.innerHTML=`
+    <span style="font-size:11px;font-weight:700;color:var(--p)">💍 بحث بسنين الزواج:</span>
+    <span style="font-size:11px;color:var(--txm)">من</span>
+    <input id="famYearsFrom" type="number" min="0" placeholder="1" style="width:60px;padding:5px 7px;border:1.5px solid var(--bd);border-radius:6px;font-size:12px">
+    <span style="font-size:11px;color:var(--txm)">إلى (اختياري)</span>
+    <input id="famYearsTo" type="number" min="0" placeholder="فأكتر" style="width:70px;padding:5px 7px;border:1.5px solid var(--bd);border-radius:6px;font-size:12px">
+    <button class="btn bp" style="font-size:11px" onclick="filterFamilyByYears()">بحث</button>
+    <button class="btn bw" style="font-size:11px" onclick="clearFamilyYearsFilter()">↺ الكل</button>`;
+  wrap.parentNode.insertBefore(famBox,wrap.nextSibling);
+};
+function familyHouses(members){
+  let seen=new Set();
+  let houses=[];
+  members.forEach(m=>{
+    if(seen.has(m.code))return;
+    seen.add(m.code);
+    let spouse=m.spouseCode?members.find(x=>x.code===m.spouseCode):null;
+    if(spouse)seen.add(spouse.code);
+    houses.push({main:m,spouse});
+  });
+  return houses;
+}
+function renderFamilyHouseRows(houses){
+  if(!houses.length)return '<tr><td colspan="5" style="text-align:center;color:var(--txm);padding:16px">لا يوجد بيوت مطابقة</td></tr>';
+  return houses.map(h=>{
+    let m=h.main,sp=h.spouse;
+    let names=sp?`${m.name} <span style="color:var(--txm)">و</span> ${sp.name}`:m.name;
+    let yrs=m.marriageYears!=null?m.marriageYears+' سنة':'—';
+    let phone=m.phone||(sp&&sp.phone)||'';
+    return `<tr>
+      <td><span class="tag tag-v">🏠</span></td>
+      <td style="font-weight:700"><span class="name-link" onclick="openMemberProfile('${m.code}')">${names}</span></td>
+      <td><span class="tag tag-p">${yrs}</span></td>
+      <td>${phone?`<a href="https://wa.me/2${phone.replace(/^0/,'')}" target="_blank" style="text-decoration:none">💬 ${phone}</a>`:'—'}</td>
+      <td><button class="btn bw" style="font-size:10px;padding:3px 7px" onclick="openMemberProfile('${m.code}')">فتح البيت</button></td>
+    </tr>`;
+  }).join('');
+}
+function filterFamilyByYears(){
+  let fromV=getVal('famYearsFrom').trim();
+  let toV=getVal('famYearsTo').trim();
+  if(fromV===''&&toV===''){clearFamilyYearsFilter();return;}
+  let from=fromV!==''?parseInt(fromV):0;
+  let to=toV!==''?parseInt(toV):Infinity;
+  let base=getMembersPageList().filter(m=>m.isFamily&&isMarried(m.maritalStatus)&&m.marriageYears!=null&&m.marriageYears>=from&&m.marriageYears<=to);
+  let houses=familyHouses(base);
+  let tbody=document.getElementById('membersTbody');
+  let table=document.getElementById('membersTable');
+  if(table){
+    let thead=table.querySelector('thead tr');
+    if(thead)thead.innerHTML='<th></th><th>البيت</th><th>سنين الزواج</th><th>تواصل</th><th></th>';
+  }
+  if(tbody)tbody.innerHTML=renderFamilyHouseRows(houses);
+  let title=document.querySelector('.card-title');
+  if(title)title.textContent=`🏠 البيوت المطابقة (${houses.length})`;
+}
+function clearFamilyYearsFilter(){
+  let ff=document.getElementById('famYearsFrom'),ft=document.getElementById('famYearsTo');
+  if(ff)ff.value='';if(ft)ft.value='';
+  renderMembersPage();
 }
 
 // ===== حذف عضو أسرة: يفك الربط عن الطرف التاني =====
