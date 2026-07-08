@@ -2703,6 +2703,7 @@ function openMemberProfile(code){
 // ===== تسجيل افتقاد =====
 function openFollowUp(code){
   let m=(DB.members||[]).find(x=>x.code===code);if(!m)return;
+  let spouse=(m.isFamily&&m.spouseCode)?(DB.members||[]).find(x=>x.code===m.spouseCode):null;
   let box=document.getElementById('memberModalBox');
   box.classList.remove('wide');
   box.innerHTML=`
@@ -2711,6 +2712,9 @@ function openFollowUp(code){
       <option>مكالمة</option><option>واتساب</option><option>زيارة</option><option>مقابلة في الكنيسة</option><option>رسالة</option>
     </select></div>
     <div class="field"><label>النتيجة / سبب الغياب / ملاحظات</label><textarea id="fu_note" rows="3" placeholder="مثال: اتكلمت معاه — مسافر عند أقاربه وراجع الأسبوع الجاي"></textarea></div>
+    ${spouse?`<div class="field"><label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px">
+      <input type="checkbox" id="fu_house" checked style="width:auto"> 🏠 ده افتقاد للبيت كله — يتسجل عند ${spouse.name} كمان
+    </label></div>`:''}
     <div class="modal-btns">
       <button class="btn bg" onclick="saveFollowUp('${code}')">✓ تسجيل</button>
       <button class="btn bw" onclick="closeModal()">إلغاء</button>
@@ -2719,12 +2723,28 @@ function openFollowUp(code){
 }
 async function saveFollowUp(code){
   let m=(DB.members||[]).find(x=>x.code===code);if(!m)return;
-  let f={id:uid(),code,ts:Date.now(),by:currentUser.name,typ:getVal('fu_typ'),note:getVal('fu_note').trim()};
+  let ts=Date.now();
+  let typ=getVal('fu_typ'),note=getVal('fu_note').trim();
+  let f={id:uid(),code,ts,by:currentUser.name,typ,note};
   if(!DB.followUps)DB.followUps=[];
   DB.followUps.push(f);
-  logActivity('افتقاد: '+m.name+' — '+f.typ);
-  await saveDB({followUpsPatch:{upsert:[f]}});
-  closeModal();toast('✓ اتسجل الافتقاد','ok',true);
+  let toSave=[f];
+  let logMsg='افتقاد: '+m.name+' — '+typ;
+  // افتقاد للبيت كله: يتسجل عند الطرف التاني كمان
+  let houseChk=document.getElementById('fu_house');
+  if(houseChk&&houseChk.checked&&m.isFamily&&m.spouseCode){
+    let spouse=(DB.members||[]).find(x=>x.code===m.spouseCode);
+    if(spouse){
+      let f2={id:uid(),code:spouse.code,ts,by:currentUser.name,typ,note,houseWith:m.code};
+      f.houseWith=spouse.code;
+      DB.followUps.push(f2);
+      toSave.push(f2);
+      logMsg='افتقاد للبيت: '+m.name+' و'+spouse.name+' — '+typ;
+    }
+  }
+  logActivity(logMsg);
+  await saveDB({followUpsPatch:{upsert:toSave}});
+  closeModal();toast('✓ اتسجل الافتقاد'+(toSave.length>1?' للبيت':''),'ok',true);
   if(_currentRptTab==='rpt_alerts'||_currentRptTab==='rpt_followup'){let c=document.getElementById('rptContent');if(c)switchRptTab(_currentRptTab);}
 }
 
