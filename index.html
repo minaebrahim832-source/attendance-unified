@@ -4180,6 +4180,123 @@ function clearFamilyYearsFilter(){
   renderMembersPage();
 }
 
+// ===== تاب: بيوت محتاجة افتقاد (خدمة الأسر بس) =====
+let _famVisitUnit='أسابيع';
+const _origRenderReportsPage=renderReportsPage;
+renderReportsPage=function(){
+  _origRenderReportsPage();
+  if(!(isFamilyServiceId(currentUser.serviceId)||(isSuperAdmin()&&getMembersPageList().some(m=>m.isFamily))))return;
+  // نضيف زرار التاب في شريط التابات
+  let bar=document.querySelector('.rpt-tabs');
+  if(bar&&!document.getElementById('rtab_rpt_famvisit')){
+    let btn=document.createElement('button');
+    btn.className='btn bw';btn.id='rtab_rpt_famvisit';btn.style.fontSize='11px';
+    btn.textContent='🏠 بيوت محتاجة افتقاد';
+    btn.onclick=()=>switchRptTab('rpt_famvisit');
+    bar.appendChild(btn);
+  }
+};
+const _origSwitchRptTab=switchRptTab;
+switchRptTab=function(id){
+  if(id==='rpt_famvisit'){
+    _currentRptTab=id;
+    document.querySelectorAll('[id^=rtab_]').forEach(b=>{b.className=b.id==='rtab_'+id?'btn bp':'btn bw';b.style.fontSize='11px';});
+    let c=document.getElementById('rptContent');
+    if(c)renderRptFamVisit(c);
+    return;
+  }
+  return _origSwitchRptTab(id);
+};
+function lastFollowUpTs(code){
+  let f=(DB.followUps||[]).filter(x=>x.code===code).sort((a,b)=>b.ts-a.ts)[0];
+  return f?f.ts:null;
+}
+function renderRptFamVisit(container){
+  let fam=getMembersPageList().filter(m=>m.isFamily);
+  let houses=familyHouses(fam);
+  let now=Date.now();
+  // لكل بيت: آخر افتقاد لأي من الطرفين، والمدة بالأيام
+  let rows=houses.map(h=>{
+    let codes=[h.main.code];if(h.spouse)codes.push(h.spouse.code);
+    let last=null,by='';
+    codes.forEach(cd=>{
+      let f=(DB.followUps||[]).filter(x=>x.code===cd).sort((a,b)=>b.ts-a.ts)[0];
+      if(f&&(!last||f.ts>last)){last=f.ts;by=f.by;}
+    });
+    let days=last?Math.floor((now-last)/86400000):null;
+    return{h,last,by,days};
+  });
+  let never=rows.filter(r=>r.last===null);
+  let visited=rows.filter(r=>r.last!==null).sort((a,b)=>a.last-b.last); // الأقدم افتقاداً فوق
+  // فلتر المدة
+  let unit=_famVisitUnit;
+  let perUnit=unit==='شهور'?30:7;
+  let fromV=(getVal('fv_from')||'').trim(),toV=(getVal('fv_to')||'').trim();
+  let filtered=visited;
+  if(fromV!==''||toV!==''){
+    let fromD=fromV!==''?parseInt(fromV)*perUnit:0;
+    let toD=toV!==''?parseInt(toV)*perUnit:Infinity;
+    filtered=visited.filter(r=>r.days>=fromD&&r.days<=toD);
+  }
+  function fmtAgo(days){
+    if(days<7)return days+' يوم';
+    if(days<60)return Math.floor(days/7)+' أسبوع';
+    return Math.floor(days/30)+' شهر';
+  }
+  function houseName(h){return h.spouse?`${h.main.name} و ${h.spouse.name}`:h.main.name;}
+  container.innerHTML=`
+    <div class="card">
+      <div class="card-title">🏠 بيوت محتاجة افتقاد</div>
+      <div style="font-size:11px;color:var(--txm);margin-bottom:8px">مرتبة بالأقدم افتقاداً — اللي بقاله أطول فترة محدش كلّمه يظهر الأول</div>
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;background:var(--pl);border-radius:7px;padding:7px 9px">
+        <span style="font-size:11px;font-weight:700;color:var(--p)">آخر افتقاد بقاله:</span>
+        <span style="font-size:11px;color:var(--txm)">من</span>
+        <input id="fv_from" type="number" min="0" value="${fromV}" placeholder="0" style="width:55px;padding:5px 7px;border:1.5px solid var(--bd);border-radius:6px;font-size:12px">
+        <span style="font-size:11px;color:var(--txm)">إلى</span>
+        <input id="fv_to" type="number" min="0" value="${toV}" placeholder="فأكتر" style="width:65px;padding:5px 7px;border:1.5px solid var(--bd);border-radius:6px;font-size:12px">
+        <select id="fv_unit" style="padding:5px 7px;border:1.5px solid var(--bd);border-radius:6px;font-size:12px">
+          <option${unit==='أسابيع'?' selected':''}>أسابيع</option>
+          <option${unit==='شهور'?' selected':''}>شهور</option>
+        </select>
+        <button class="btn bp" style="font-size:11px" onclick="applyFamVisitFilter()">بحث</button>
+        <button class="btn bw" style="font-size:11px" onclick="resetFamVisitFilter()">↺</button>
+      </div>
+    </div>
+    ${never.length?`<div class="card">
+      <div class="card-title" style="color:var(--r)">🔴 لم يُفتقدوا نهائياً (${never.length})</div>
+      <div class="tbl-wrap"><table>
+        <thead><tr><th>البيت</th><th>تواصل</th><th></th></tr></thead>
+        <tbody>${never.map(r=>{let ph=r.h.main.phone||(r.h.spouse&&r.h.spouse.phone)||'';return`<tr>
+          <td style="font-weight:700"><span class="name-link" onclick="openMemberProfile('${r.h.main.code}')">${houseName(r.h)}</span></td>
+          <td>${ph?`<a href="https://wa.me/2${ph.replace(/^0/,'')}" target="_blank" style="text-decoration:none">💬 ${ph}</a>`:'—'}</td>
+          <td><button class="btn bp" style="font-size:10px;padding:3px 8px" onclick="openFollowUp('${r.h.main.code}')">📞 افتقاد</button></td>
+        </tr>`;}).join('')}</tbody></table></div>
+    </div>`:''}
+    <div class="card">
+      <div class="card-title">📋 حسب آخر افتقاد (${filtered.length})</div>
+      ${filtered.length?`<div class="tbl-wrap"><table>
+        <thead><tr><th>البيت</th><th>آخر افتقاد</th><th>بواسطة</th><th></th></tr></thead>
+        <tbody>${filtered.map(r=>{
+          let urgent=r.days>=(unit==='شهور'?60:28);
+          return`<tr>
+          <td style="font-weight:700"><span class="name-link" onclick="openMemberProfile('${r.h.main.code}')">${houseName(r.h)}</span></td>
+          <td><span class="tag ${urgent?'tag-r':'tag-p'}">بقاله ${fmtAgo(r.days)}</span></td>
+          <td style="font-size:11px;color:var(--txm)">${r.by||'—'}</td>
+          <td><button class="btn bp" style="font-size:10px;padding:3px 8px" onclick="openFollowUp('${r.h.main.code}')">📞 افتقاد</button></td>
+        </tr>`;}).join('')}</tbody></table></div>`
+      :'<div style="text-align:center;color:var(--txm);padding:14px">مفيش بيوت في النطاق ده</div>'}
+    </div>`;
+}
+function applyFamVisitFilter(){
+  _famVisitUnit=getVal('fv_unit')||'أسابيع';
+  renderRptFamVisit(document.getElementById('rptContent'));
+}
+function resetFamVisitFilter(){
+  let a=document.getElementById('fv_from'),b=document.getElementById('fv_to');
+  if(a)a.value='';if(b)b.value='';
+  renderRptFamVisit(document.getElementById('rptContent'));
+}
+
 // ===== حذف عضو أسرة: يفك الربط عن الطرف التاني =====
 const _origDeleteMember=(typeof deleteMember!=='undefined')?deleteMember:null;
 if(_origDeleteMember){
