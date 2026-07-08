@@ -1969,7 +1969,7 @@ function parseImportCSV(text){
     let servantRaw=get(ci.servantName).trim();
     if(isServant()){servant=currentUser;}
     else if(servantRaw){
-      servant=(DB.users||[]).find(u=>u.active!==false&&u.role==='servant'&&u.name.trim().replace(/\s+/g,' ')===servantRaw.replace(/\s+/g,' ')&&(!svcId||u.serviceId===svcId));
+      servant=(DB.users||[]).find(u=>u.active!==false&&(u.role==='servant'||u.role==='theatre_servant')&&u.name.trim().replace(/\s+/g,' ')===servantRaw.replace(/\s+/g,' ')&&(!svcId||u.serviceId===svcId));
       if(!servant){rejected.push({name,reason:'الخادم "'+servantRaw+'" غير موجود'});return;}
     }
     let sectionId=currentUser.sectionId||'';
@@ -2011,7 +2011,10 @@ async function confirmImportMembers(){
   let el=document.getElementById('_importData');
   if(!el)return;
   let valid=JSON.parse(decodeURIComponent(el.textContent));
-  let added=valid.map(m=>{let nm={code:nextCode(),...m};delete nm._sd;return nm;});
+  // إصلاح: نحسب أعلى كود موجود مرة واحدة ونزوّده تسلسلياً — بدل nextCode() اللي بيرجع نفس الكود لكلهم
+  let nums=(DB.members||[]).map(m=>parseInt((m.code||'').replace('M',''))).filter(n=>!isNaN(n));
+  let next=(nums.length?Math.max(...nums):0)+1;
+  let added=valid.map(m=>{let nm={code:'M'+String(next++).padStart(3,'0'),...m};delete nm._sd;return nm;});
   added.forEach(m=>DB.members.push(m));
   logActivity('استيراد CSV: '+added.length+' عضو');
   await saveDB({membersPatch:{upsert:added}});
