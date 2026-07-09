@@ -152,6 +152,18 @@ tr:hover td{background:#fafafa;}
 <!-- Dirty (unsynced) Banner -->
 <div class="offline-banner" id="dirtyBanner" style="background:#d97706">⏳ في تعديلات لسه متتحفظتش على السيرفر — بنعيد المحاولة تلقائياً</div>
 
+<!-- Access Gate (بوابة الدخول العامة) -->
+<div id="gateScreen" style="position:fixed;inset:0;z-index:5000;background:linear-gradient(135deg,#1e1b4b,#312e81);display:flex;align-items:center;justify-content:center;padding:20px">
+  <div style="background:#fff;border-radius:16px;padding:32px 26px;max-width:340px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.4);text-align:center">
+    <div style="font-size:42px;margin-bottom:8px">🔐</div>
+    <div style="font-weight:800;font-size:18px;color:#1e1b4b;margin-bottom:4px">نظام الحضور الموحد</div>
+    <div style="font-size:12px;color:#6b7280;margin-bottom:18px">للخدام والكهنة فقط — أدخل كود الدخول</div>
+    <div id="gateErr" style="display:none;color:#dc2626;font-size:12px;font-weight:700;margin-bottom:10px">✕ كود غلط</div>
+    <input type="password" id="gateInput" placeholder="كود الدخول" onkeydown="if(event.key==='Enter')checkGate()" style="width:100%;padding:11px 14px;border:1.5px solid #d1d5db;border-radius:9px;font-size:14px;outline:none;margin-bottom:12px;text-align:center;box-sizing:border-box">
+    <button onclick="checkGate()" style="width:100%;padding:11px;background:#4f46e5;color:#fff;border:none;border-radius:9px;font-size:14px;font-weight:700;cursor:pointer">دخول</button>
+  </div>
+</div>
+
 <!-- Login -->
 <div class="login-screen hidden" id="loginScreen">
   <div class="login-box">
@@ -229,6 +241,30 @@ async function sbSave(data){
 // كلمة سر المراقب: لم تعد مخزنة نصاً في الكود — بيتم التحقق منها عن طريق هاش مملّح فقط
 const VIEWER_SALT='vsalt_v3::';
 const VIEWER_PW_HASH='6f382409d96df92844f57379ad0addc018fdf686b4ab2e8730337b947849e374';
+// ===== بوابة الدخول العامة (طبقة أولى قبل شاشة الدخول) =====
+// الكود مخزّن كهاش فقط (زي كلمة سر المراقب) — لتغييره: احسب هاش الكود الجديد بنفس الملح وضعه في GATE_HASH
+const GATE_SALT='gate_v3::';
+const GATE_HASH='62d15c21ec8009b64db8fc9b543852559ceb1cba94cefa5c519cd6fa011e6a35';
+async function _gateHash(pw){
+  let buf=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(GATE_SALT+pw));
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+async function checkGate(){
+  let pw=(document.getElementById('gateInput').value||'').trim();
+  let err=document.getElementById('gateErr');
+  if(await _gateHash(pw)===GATE_HASH){
+    try{sessionStorage.setItem('gate_ok','1');}catch(e){}
+    let g=document.getElementById('gateScreen');
+    if(g)g.style.display='none';
+    if(err)err.style.display='none';
+  }else{
+    if(err)err.style.display='block';
+    document.getElementById('gateInput').value='';
+  }
+}
+function gatePassed(){try{return sessionStorage.getItem('gate_ok')==='1';}catch(e){return false;}}
+// لو البوابة اتعدّت قبل كده في نفس الجلسة، نخفيها فوراً
+(function(){try{if(gatePassed()){let g=document.getElementById('gateScreen');if(g)g.style.display='none';}}catch(e){}})();
 async function isViewerPw(pw){
   try{
     let enc=new TextEncoder().encode(VIEWER_SALT+pw);
@@ -1174,7 +1210,7 @@ async function confirmAddMember(){
   );
 
   let m={
-    code:nextCode(),name,
+    name,
     phone:getVal('am_phone').trim(),
     // السنة: للخادم تيجي من مسئول السنة اللي أضافه، لمسئول السنة تيجي من حسابه
     grade:isYearAdmin()?currentUser.year:
@@ -1186,9 +1222,8 @@ async function confirmAddMember(){
     notes:getVal('am_notes').trim(),
     serviceId:svcId,categoryId,sectionId,groupId,
   };
-  DB.members.push(m);
-  logActivity('إضافة عضو: '+m.name+' ('+m.code+')');
-  await saveDB({membersPatch:{upsert:[m]}});
+  logActivity('إضافة عضو: '+m.name);
+  await saveDB({pendingNewMembers:[m]}); // الكود بيتعين من أحدث نسخة لحظة الحفظ — يمنع التكرار بين الأجهزة
   closeModal();renderMembersPage();
 }
 
@@ -2343,8 +2378,28 @@ function _applyPendingMerge(cl){
 
 async function _saveDBImpl(opts){
   opts=opts||{};
+  // ===== تعيين أكواد الأعضاء الجدد من أحدث نسخة لحظة الحفظ (يمنع تكرار الكود بين جهازين في نفس اللحظة) =====
+  let pendingNew=opts.pendingNewMembers||null;
+  if(pendingNew)delete opts.pendingNewMembers;
   _accumulatePending(opts);
   lsave();setSyncState('syncing');
+  let assignedOut=null;
+  function _resolveAtRefs(assigned){
+    // مراجع '@i' = كود العضو الجديد رقم i (لربط الزوجين قبل ما الأكواد تتعرف)
+    function rv(v){if(typeof v==='string'&&v.charAt(0)==='@'){let i=parseInt(v.slice(1));if(!isNaN(i)&&assigned[i])return assigned[i].code;}return v;}
+    assigned.forEach(a=>{if(a.spouseCode)a.spouseCode=rv(a.spouseCode);});
+    if(_pending.membersPatch&&_pending.membersPatch.upsert)_pending.membersPatch.upsert.forEach(u=>{if(u&&u.spouseCode)u.spouseCode=rv(u.spouseCode);});
+    (DB.members||[]).forEach(u=>{if(u&&typeof u.spouseCode==='string'&&u.spouseCode.charAt(0)==='@')u.spouseCode=rv(u.spouseCode);});
+  }
+  function assignPendingNew(){
+    if(!pendingNew||!pendingNew.length)return null;
+    let nums=(DB.members||[]).map(x=>parseInt((x.code||'').replace('M',''))).filter(n=>!isNaN(n));
+    let next=(nums.length?Math.max(...nums):0)+1;
+    let assigned=pendingNew.map(src=>{let nm=Object.assign({},src);nm.code='M'+String(next++).padStart(3,'0');return nm;});
+    _resolveAtRefs(assigned);
+    assigned.forEach(a=>DB.members.push(a));
+    return assigned;
+  }
   let attempts=0;
   while(attempts<4){
     attempts++;
@@ -2356,24 +2411,43 @@ async function _saveDBImpl(opts){
           _applyPendingMerge(cl);
           lsave();
         }
-      }catch(e){setSyncState('err');_setDirty(true);return;}
+      }catch(e){
+        // أوفلاين: تعيين احتياطي من المحلي + إدراجهم في الطابور عشان إعادة المحاولة الخلفية تحفظهم
+        if(pendingNew&&!assignedOut){
+          assignedOut=assignPendingNew();
+          if(assignedOut)_accumulatePending({membersPatch:{upsert:assignedOut}});
+          lsave();
+        }
+        setSyncState('err');_setDirty(true);return assignedOut;
+      }
     }
+    if(pendingNew)assignedOut=assignPendingNew();
     try{
       let r=await sbSaveGuarded(DB);
       if(r&&r.ok){
         setSyncState('ok');_clearPending();_setDirty(false);
         toast('✓ اتحفظ على السيرفر','ok');
-        return;
+        return assignedOut||true;
       }
       if(r&&r.conflict){
-        // حد كتب قبلنا — نقرا النسخة الأحدث وندمج تعديلاتنا فوقها ونحاول تاني
+        // حد كتب قبلنا — نشيل الأكواد المؤقتة (هتتعين تاني من النسخة الأحدث) وندمج ونحاول
+        if(assignedOut){let s=new Set(assignedOut.map(a=>a.code));DB.members=(DB.members||[]).filter(x=>!s.has(x.code));assignedOut=null;}
         if(opts.skipArrMerge){await sbFetchFull();}
         continue;
       }
-    }catch(e){setSyncState('err');_setDirty(true);return;}
+    }catch(e){
+      if(pendingNew){
+        if(!assignedOut)assignedOut=assignPendingNew();
+        if(assignedOut)_accumulatePending({membersPatch:{upsert:assignedOut}});
+        lsave();
+      }
+      setSyncState('err');_setDirty(true);return assignedOut;
+    }
   }
+  if(pendingNew&&assignedOut){_accumulatePending({membersPatch:{upsert:assignedOut}});lsave();}
   setSyncState('err');_setDirty(true);
   toast('⚠ ضغط عالي على الحفظ — هنعيد المحاولة','warn',true);
+  return assignedOut;
 }
 
 async function refreshDB(){
@@ -3830,15 +3904,15 @@ async function confirmAddFamilyMember(svcId){
   let children=collectChildren();
   let years=getVal('fam_years');
 
+  // الكود بيتعين جوه saveDB من أحدث نسخة — يمنع التكرار بين جهازين في نفس اللحظة
   let m={
-    code:nextCode(),name,
+    name,
     phone:getVal('am_phone').trim(),
     grade:'تخرج', // أولياء الأمور دايماً "تخرج" — الترقية تتجاهلهم
     father:getVal('am_father').trim(),
     addr:getVal('am_addr').trim(),
     notes:getVal('am_notes').trim(),
     serviceId:svcId,categoryId:'',sectionId:'',groupId,
-    // حقول الأسرة
     isFamily:true,
     maritalStatus:marital,
     job:getVal('fam_job').trim(),
@@ -3847,50 +3921,42 @@ async function confirmAddFamilyMember(svcId){
     spouseCode:'',spouseName:''
   };
 
-  let toSave=[m];
-  // الربط الذكي بالزوج/ة (فقط لو متزوج/ة)
+  let pendingNew=[m];       // m = '@0'
+  let extraUpserts=[];
   if(isMarried(marital)&&spouseName){
-    let peer=familyPeersFor(svcId,m.code).find(p=>p.name.trim()===spouseName.trim());
+    let peer=familyPeersFor(svcId,'').find(p=>p.name.trim()===spouseName.trim());
     if(peer){
-      // موجود — نربط الطرفين
+      // موجود — نربط الطرفين ('@0' = كود m بعد التعيين)
       m.spouseCode=peer.code;m.spouseName=peer.name;
       let peerUpd=Object.assign({},peer,{
-        spouseCode:m.code,spouseName:m.name,
-        // بيانات البيت المشتركة تتزامن
+        spouseCode:'@0',spouseName:m.name,
         marriageYears:m.marriageYears,children:m.children,
         maritalStatus:peer.maritalStatus&&isMarried(peer.maritalStatus)?peer.maritalStatus:(marital==='متزوج'?'متزوجة':'متزوج')
       });
-      let pi=DB.members.findIndex(x=>x.code===peer.code);
-      if(pi>=0)DB.members[pi]=peerUpd;
-      toSave.push(peerUpd);
+      extraUpserts.push(peerUpd);
     }else{
-      // مش موجود — ننشئ ملف الطرف التاني تلقائياً بنفس بيانات البيت
+      // مش موجود — ننشئ ملف الطرف التاني تلقائياً بنفس بيانات البيت ('@1' = الزوجة)
       let spouseMarital=marital==='متزوج'?'متزوجة':'متزوج';
       let sp={
-        code:'',name:spouseName,phone:'',grade:'تخرج',
+        name:spouseName,phone:'',grade:'تخرج',
         father:'',addr:m.addr,notes:'',
         serviceId:svcId,categoryId:'',sectionId:'',groupId:m.groupId,
         isFamily:true,maritalStatus:spouseMarital,job:'',
         marriageYears:m.marriageYears,children:m.children,
-        spouseCode:m.code,spouseName:m.name,
+        spouseCode:'@0',spouseName:m.name,
         _autoCreated:true
       };
-      // كود الطرف التاني بيتحدد بعد كود العضو الأساسي
-      DB.members.push(m); // مؤقتاً عشان nextCode يحسبه
-      sp.code=nextCode();
-      DB.members.pop();
-      m.spouseCode=sp.code;m.spouseName=sp.name;
-      toSave.push(sp);
-      DB.members.push(sp);
+      m.spouseCode='@1';m.spouseName=sp.name;
+      pendingNew.push(sp);
     }
   }
-  DB.members.push(m);
-  logActivity('إضافة فرد أسرة: '+m.name+' ('+m.code+')'+(m.spouseCode?' — مربوط بـ'+m.spouseName:''));
-  await saveDB({membersPatch:{upsert:toSave}});
+  logActivity('إضافة فرد أسرة: '+m.name+(spouseName?' — بيت مع '+spouseName:''));
+  let assigned=await saveDB({pendingNewMembers:pendingNew,membersPatch:extraUpserts.length?{upsert:extraUpserts}:undefined});
+  let saved=(assigned&&assigned[0])?assigned[0]:m;
   closeModal();
   document.getElementById('memberModalBox').classList.remove('wide');
   renderMembersPage();
-  toast('✓ اتسجل '+m.name+(m.spouseCode?' ومربوط بـ'+m.spouseName:''),'ok',true);
+  toast('✓ اتسجل '+saved.name+(saved.spouseCode&&saved.spouseCode.charAt(0)!=='@'?' ومربوط بـ'+(saved.spouseName||''):''),'ok',true);
 }
 
 // ===== تعديل عضو أسرة (يستبدل editMember لأعضاء الأسر) =====
@@ -4298,6 +4364,472 @@ function resetFamVisitFilter(){
   let a=document.getElementById('fv_from'),b=document.getElementById('fv_to');
   if(a)a.value='';if(b)b.value='';
   renderRptFamVisit(document.getElementById('rptContent'));
+}
+
+// ===== إكسيل الأسر: استيراد/تصدير/نموذج (شيتين: الأسر + الأولاد) =====
+function famDownloadTemplate(){
+  try{
+    let wb=XLSX.utils.book_new();
+    let famRows=[
+      ['اسم الأب','اسم الأم','التليفون','العنوان','سنين الزواج','مهنة الأب','مهنة الأم','الحالة الاجتماعية'],
+      ['مثال: جرجس سمير','مريم فؤاد','01011111111','عين شمس','12','مهندس','ربة منزل','متزوج'],
+      ['مثال: بيشوي نبيل','مارتينا عادل','01022222222','المطرية','5','طبيب','مدرّسة','متزوج'],
+    ];
+    let kidRows=[
+      ['الاسم','السنة الدراسية','اسم الأب','اسم الأم'],
+      ['مثال: مينا جرجس','الأولى ابتدائي','جرجس سمير','مريم فؤاد'],
+      ['مثال: مارتينا جرجس','KG2','جرجس سمير','مريم فؤاد'],
+    ];
+    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(famRows),'الأسر');
+    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(kidRows),'الأولاد');
+    XLSX.writeFile(wb,'نموذج_الأسر.xlsx');
+  }catch(e){toast('تعذّر إنشاء النموذج','err',true);}
+}
+
+function famImportExcel(input){
+  let f=input.files[0];if(!f)return;
+  let svcId=currentUser.serviceId;
+  if(!isFamilyServiceId(svcId)&&!isSuperAdmin()){toast('الاستيراد ده لخدمة الأسر','warn',true);input.value='';return;}
+  let r=new FileReader();
+  r.onload=async e=>{
+    try{
+      let data=new Uint8Array(e.target.result);
+      let wb=XLSX.read(data,{type:'array'});
+      let famSheet=wb.Sheets['الأسر']||wb.Sheets[wb.SheetNames[0]];
+      let kidSheet=wb.Sheets['الأولاد']||wb.Sheets[wb.SheetNames[1]];
+      let famAoa=famSheet?XLSX.utils.sheet_to_json(famSheet,{header:1}):[];
+      let kidAoa=kidSheet?XLSX.utils.sheet_to_json(kidSheet,{header:1}):[];
+      await famProcessImport(famAoa,kidAoa,svcId);
+    }catch(err){
+      showModal('خطأ','تعذّر قراءة ملف الأسر — اتأكد إنه فيه شيت "الأسر" وشيت "الأولاد"','حسناً',null);
+    }
+  };
+  r.readAsArrayBuffer(f);
+  input.value='';
+}
+
+async function famProcessImport(famAoa,kidAoa,svcId){
+  if(!famAoa||famAoa.length<2){showModal('خطأ','شيت "الأسر" فاضي','حسناً',null);return;}
+  // خريطة الأعمدة من رأس شيت الأسر
+  let H=famAoa[0].map(x=>String(x||'').trim());
+  function fi(names){for(let n of names){let i=H.indexOf(n);if(i>=0)return i;}return -1;}
+  let ci={dad:fi(['اسم الأب','الأب']),mom:fi(['اسم الأم','الأم']),phone:fi(['التليفون','تليفون']),
+    addr:fi(['العنوان']),years:fi(['سنين الزواج','سنين']),dadJob:fi(['مهنة الأب']),momJob:fi(['مهنة الأم']),
+    marital:fi(['الحالة الاجتماعية','الحالة'])};
+  if(ci.dad<0){showModal('خطأ','عمود "اسم الأب" غير موجود في شيت الأسر','حسناً',null);return;}
+
+  // خريطة الأولاد حسب (الأب+الأم)
+  let kidsByHouse={};
+  if(kidAoa&&kidAoa.length>=2){
+    let KH=kidAoa[0].map(x=>String(x||'').trim());
+    function ki(names){for(let n of names){let i=KH.indexOf(n);if(i>=0)return i;}return -1;}
+    let kc={name:ki(['الاسم','اسم الابن','الابن']),grade:ki(['السنة الدراسية','السنة']),dad:ki(['اسم الأب','الأب']),mom:ki(['اسم الأم','الأم'])};
+    kidAoa.slice(1).forEach(row=>{
+      let nm=String(row[kc.name]||'').trim();if(!nm)return;
+      let key=String(row[kc.dad]||'').trim()+'||'+String(row[kc.mom]||'').trim();
+      if(!kidsByHouse[key])kidsByHouse[key]=[];
+      kidsByHouse[key].push({name:nm,grade:String(row[kc.grade]||'').trim()||'مش في مرحلة دراسية',inActivities:false});
+    });
+  }
+
+  // بناء البيوت
+  let pendingNew=[];let refIndex=0;let housesCount=0;
+  famAoa.slice(1).forEach(row=>{
+    let dadName=String(row[ci.dad]||'').trim();
+    let momName=ci.mom>=0?String(row[ci.mom]||'').trim():'';
+    if(!dadName&&!momName)return;
+    // تجاهل صفوف الأمثلة
+    if(dadName.startsWith('مثال:')||momName.startsWith('مثال:'))return;
+    housesCount++;
+    let years=ci.years>=0?parseInt(row[ci.years]):null;if(isNaN(years))years=null;
+    let addr=ci.addr>=0?String(row[ci.addr]||'').trim():'';
+    let phone=ci.phone>=0?String(row[ci.phone]||'').trim():'';
+    let marital=ci.marital>=0?String(row[ci.marital]||'').trim():'متزوج';
+    if(!isMarried(marital))marital='متزوج';
+    let kids=kidsByHouse[dadName+'||'+momName]||[];
+    // الأب
+    let dadRef=refIndex++;
+    let dad={name:dadName,phone,grade:'تخرج',father:'',addr,notes:'',
+      serviceId:svcId,categoryId:'',sectionId:'',groupId:'',isFamily:true,
+      maritalStatus:'متزوج',job:ci.dadJob>=0?String(row[ci.dadJob]||'').trim():'',
+      marriageYears:years,children:kids,spouseCode:'',spouseName:momName};
+    pendingNew.push(dad);
+    // الأم (لو ليها اسم)
+    if(momName){
+      let momRef=refIndex++;
+      let mom={name:momName,phone:'',grade:'تخرج',father:'',addr,notes:'',
+        serviceId:svcId,categoryId:'',sectionId:'',groupId:'',isFamily:true,
+        maritalStatus:'متزوجة',job:ci.momJob>=0?String(row[ci.momJob]||'').trim():'',
+        marriageYears:years,children:kids,spouseCode:'@'+dadRef,spouseName:dadName};
+      dad.spouseCode='@'+momRef;
+      pendingNew.push(mom);
+    }
+  });
+
+  if(!pendingNew.length){showModal('تنبيه','مفيش بيوت صالحة في الملف','حسناً',null);return;}
+  logActivity('استيراد أسر: '+housesCount+' بيت ('+pendingNew.length+' فرد)');
+  await saveDB({pendingNewMembers:pendingNew});
+  showModal('تم','تم استيراد '+housesCount+' بيت ('+pendingNew.length+' فرد) بالأولاد والربط','حسناً',()=>renderMembersPage(),'ok');
+}
+
+function famExportExcel(){
+  try{
+    let fam=getMembersPageList().filter(m=>m.isFamily);
+    let houses=familyHouses(fam);
+    let famRows=[['اسم الأب','اسم الأم','التليفون','العنوان','سنين الزواج','مهنة الأب','مهنة الأم','الحالة الاجتماعية']];
+    let kidRows=[['الاسم','السنة الدراسية','اسم الأب','اسم الأم']];
+    houses.forEach(h=>{
+      let m=h.main,sp=h.spouse;
+      // نحدد الأب/الأم من الحالة الاجتماعية
+      let dad=m,mom=sp;
+      if(m.maritalStatus==='متزوجة'&&sp){dad=sp;mom=m;}
+      let dadName=dad?dad.name:'',momName=mom?mom.name:'';
+      famRows.push([dadName,momName,(dad&&dad.phone)||(mom&&mom.phone)||'',dad?dad.addr:'',
+        dad&&dad.marriageYears!=null?dad.marriageYears:'',dad?dad.job:'',mom?mom.job:'',dad?dad.maritalStatus:'']);
+      // الأولاد (من الأب — مشتركة)
+      let kids=(dad&&dad.children)||(mom&&mom.children)||[];
+      kids.forEach(c=>kidRows.push([c.name,c.grade||'',dadName,momName]));
+    });
+    let wb=XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(famRows),'الأسر');
+    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(kidRows),'الأولاد');
+    XLSX.writeFile(wb,'الأسر_'+todayKey()+'.xlsx');
+  }catch(e){toast('تعذّر التصدير','err',true);}
+}
+
+// حقن أزرار الأسر في صفحة الأعضاء
+const _origRenderMembersPage_fam=renderMembersPage;
+renderMembersPage=function(){
+  _origRenderMembersPage_fam();
+  if(!(isFamilyServiceId(currentUser.serviceId)||(isSuperAdmin()&&getMembersPageList().some(m=>m.isFamily))))return;
+  // نخفي أزرار CSV العادية (مش مناسبة للأسر) ونضيف أزرار الأسر
+  let area=document.getElementById('pagesArea');
+  if(!area)return;
+  let anchor=document.getElementById('memberSearch');
+  if(!anchor)return;
+  let bar=document.createElement('div');
+  bar.style.cssText='display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px';
+  bar.innerHTML=`
+    <label class="btn bw" style="cursor:pointer;font-size:11px">📥 استيراد أسر (إكسيل)<input type="file" accept=".xlsx,.xls" style="display:none" onchange="famImportExcel(this)"></label>
+    <button class="btn bw" onclick="famDownloadTemplate()" style="font-size:11px">📄 نموذج الأسر</button>
+    <button class="btn bw" onclick="famExportExcel()" style="font-size:11px">📤 تصدير الأسر</button>`;
+  let f=anchor.closest?anchor.closest('.field'):null;
+  if(f&&f.parentNode)f.parentNode.insertBefore(bar,f);
+};
+
+// ===== المجموعات اليتيمة: أعضاء خادمهم اتشال =====
+// عضو يتيم = ليه groupId بس مفيش خادم شغّال بالـ groupId ده
+function orphanMembersInScope(){
+  let liveGroups=new Set((DB.users||[]).filter(u=>u.active!==false&&(u.role==='servant'||u.role==='theatre_servant')).map(u=>u.groupId).filter(Boolean));
+  return getMembersPageList().filter(m=>m.groupId&&!liveGroups.has(m.groupId));
+}
+// تجميع اليتامى حسب groupId القديم
+function orphanGroups(){
+  let orphans=orphanMembersInScope();
+  let byGroup={};
+  orphans.forEach(m=>{let g=m.groupId;if(!byGroup[g])byGroup[g]=[];byGroup[g].push(m);});
+  return byGroup;
+}
+
+// حذف خادم — يحذّر بأعضائه ويقترح إعادة التعيين
+const _origDeleteUser=(typeof deleteUser!=='undefined')?deleteUser:null;
+deleteUser=function(id,name){
+  let u=(DB.users||[]).find(x=>x.id===id);
+  let theirMembers=u&&u.groupId?(DB.members||[]).filter(m=>m.active!==false&&m.groupId===u.groupId):[];
+  if(theirMembers.length&&(u.role==='servant'||u.role==='theatre_servant')){
+    closeModal();
+    document.getElementById('memberModalBox').innerHTML=`
+      <div class="modal-title" style="color:var(--r)">حذف الخادم: ${name}</div>
+      <div class="status-bar warn" style="font-size:12px;margin-bottom:10px">⚠️ الخادم ده مسئول عن <strong>${theirMembers.length}</strong> عضو. لو حذفته، الأعضاء دول هيبقوا بدون خادم (يتامى) ويظهروا في تنبيه لمسئول الخدمة والسنة لإعادة توزيعهم.</div>
+      <div style="font-size:12px;color:var(--txm);margin-bottom:10px">تقدر توزّعهم دلوقتي أو تسيبهم للتنبيه وتوزّعهم بعدين.</div>
+      <div class="modal-btns" style="flex-direction:column;gap:6px">
+        <button class="btn br" onclick="confirmDeleteServant('${id}','${(name||'').replace(/'/g,"")}')">🗑 احذف وسيب الأعضاء للتنبيه</button>
+        <button class="btn bw" onclick="closeModal()">إلغاء</button>
+      </div>`;
+    document.getElementById('memberModal').classList.add('on');
+    return;
+  }
+  if(_origDeleteUser)return _origDeleteUser(id,name);
+};
+async function confirmDeleteServant(id,name){
+  DB.users=DB.users.filter(x=>x.id!==id);
+  logActivity('حذف خادم: '+name+' (أعضاؤه بقوا بدون خادم)');
+  await saveDB({usersPatch:{remove:[id]}});
+  closeModal();
+  toast('اتحذف الخادم — أعضاؤه في تنبيه إعادة التوزيع','warn',true);
+  if(typeof renderUsersPage==='function')renderUsersPage();
+}
+
+// حقن تنبيه اليتامى في صفحة الأعضاء (لمسئول الخدمة/السنة/العام)
+const _origRenderMembersPage_orphan=renderMembersPage;
+renderMembersPage=function(){
+  _origRenderMembersPage_orphan();
+  if(!(isServiceAdmin()||isYearAdmin()||isSuperAdmin()||currentUser.role==='section_admin'||currentUser.role==='category_admin'))return;
+  let groups=orphanGroups();
+  let groupIds=Object.keys(groups);
+  if(!groupIds.length)return;
+  let area=document.getElementById('pagesArea');
+  let anchor=document.getElementById('membersTable')||document.getElementById('membersTbody');
+  if(!area)return;
+  let totalOrphans=groupIds.reduce((s,g)=>s+groups[g].length,0);
+  let banner=document.createElement('div');
+  banner.className='card';
+  banner.style.cssText='border:2px solid var(--o);margin-bottom:10px';
+  banner.innerHTML=`
+    <div class="card-title" style="color:var(--o)">⚠️ أعضاء بدون خادم (${totalOrphans}) — محتاجين إعادة توزيع</div>
+    <div style="font-size:11px;color:var(--txm);margin-bottom:8px">دول أعضاء خادمهم اتشال. وزّعهم جماعي (لكل المجموعة) أو فردي.</div>
+    ${groupIds.map(g=>{
+      let ms=groups[g];
+      return `<div style="border:1px solid var(--bd);border-radius:8px;padding:8px;margin-bottom:6px">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:6px">
+          <span style="font-weight:700;font-size:12px">مجموعة يتيمة — ${ms.length} عضو</span>
+          <button class="btn bp" style="font-size:10px;padding:4px 8px" onclick="openReassignGroup('${g}')">👥 عيّن خادم للمجموعة كلها</button>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:3px">
+          ${ms.slice(0,20).map(m=>`<div style="display:flex;justify-content:space-between;align-items:center;font-size:11px;background:var(--bg2);border-radius:5px;padding:3px 7px">
+            <span>${m.name} <span style="color:var(--txm)">${m.code}</span></span>
+            <button class="btn bw" style="font-size:9px;padding:2px 6px" onclick="openReassignMember('${m.code}')">وزّعه فردي</button>
+          </div>`).join('')}
+          ${ms.length>20?`<div style="font-size:10px;color:var(--txm)">+${ms.length-20} غيرهم</div>`:''}
+        </div>
+      </div>`;
+    }).join('')}`;
+  if(anchor&&anchor.parentNode)anchor.parentNode.insertBefore(banner,anchor);
+};
+
+// اختيار خادم متاح في نطاق الأعضاء
+function availableServantsFor(member){
+  let svcId=member?member.serviceId:currentUser.serviceId;
+  return (DB.users||[]).filter(u=>u.active!==false&&(u.role==='servant'||u.role==='theatre_servant')&&u.serviceId===svcId
+    &&(!member||!member.sectionId||u.sectionId===member.sectionId)
+    &&(!member||!member.categoryId||u.categoryId===member.categoryId));
+}
+// جماعي: عيّن خادم لكل المجموعة اليتيمة
+function openReassignGroup(oldGroupId){
+  let ms=(DB.members||[]).filter(m=>m.groupId===oldGroupId&&m.active!==false);
+  if(!ms.length){toast('المجموعة فاضية','warn',true);return;}
+  let servants=availableServantsFor(ms[0]);
+  document.getElementById('memberModalBox').classList.remove('wide');
+  document.getElementById('memberModalBox').innerHTML=`
+    <div class="modal-title">👥 تعيين خادم لـ ${ms.length} عضو</div>
+    ${servants.length?`
+      <div class="field"><label>اختر الخادم (من المتاحين)</label>
+        <select id="reassign_sv">${servants.map(s=>`<option value="${s.id}">${s.name}${s.year?' — '+s.year:''}</option>`).join('')}</select>
+      </div>
+      <div class="modal-btns">
+        <button class="btn bp" onclick="doReassignGroup('${oldGroupId}')">✓ عيّن للكل</button>
+        <button class="btn bw" onclick="closeModal();renderMembersPage()">إلغاء</button>
+      </div>`
+    :`<div class="status-bar warn" style="font-size:12px">مفيش خدام متاحين في الخدمة دلوقتي. كوّد خادم جديد الأول، وبعدها وزّع عليه.</div>
+      <div class="modal-btns"><button class="btn bw" onclick="closeModal()">تمام</button></div>`}`;
+  document.getElementById('memberModal').classList.add('on');
+}
+async function doReassignGroup(oldGroupId){
+  let svId=getVal('reassign_sv');
+  let sv=(DB.users||[]).find(u=>u.id===svId);if(!sv)return;
+  let ms=(DB.members||[]).filter(m=>m.groupId===oldGroupId&&m.active!==false);
+  let upd=ms.map(m=>{let x=Object.assign({},m);x.groupId=sv.groupId;if(sv.year)x.grade=sv.year;return x;});
+  upd.forEach(x=>{let i=DB.members.findIndex(y=>y.code===x.code);if(i>=0)DB.members[i]=x;});
+  logActivity('إعادة توزيع مجموعة يتيمة ('+upd.length+' عضو) للخادم '+sv.name);
+  await saveDB({membersPatch:{upsert:upd}});
+  closeModal();renderMembersPage();
+  toast('✓ اتوزّعوا على '+sv.name,'ok',true);
+}
+// فردي: عيّن خادم لعضو واحد
+function openReassignMember(code){
+  let m=(DB.members||[]).find(x=>x.code===code);if(!m)return;
+  let servants=availableServantsFor(m);
+  document.getElementById('memberModalBox').classList.remove('wide');
+  document.getElementById('memberModalBox').innerHTML=`
+    <div class="modal-title">🧍 توزيع: ${m.name}</div>
+    ${servants.length?`
+      <div class="field"><label>اختر الخادم المسئول</label>
+        <select id="reassign_sv1">${servants.map(s=>`<option value="${s.id}">${s.name}${s.year?' — '+s.year:''}</option>`).join('')}</select>
+      </div>
+      <div class="modal-btns">
+        <button class="btn bp" onclick="doReassignMember('${code}')">✓ عيّن</button>
+        <button class="btn bw" onclick="closeModal();renderMembersPage()">إلغاء</button>
+      </div>`
+    :`<div class="status-bar warn" style="font-size:12px">مفيش خدام متاحين. كوّد خادم الأول.</div>
+      <div class="modal-btns"><button class="btn bw" onclick="closeModal()">تمام</button></div>`}`;
+  document.getElementById('memberModal').classList.add('on');
+}
+async function doReassignMember(code){
+  let svId=getVal('reassign_sv1');
+  let sv=(DB.users||[]).find(u=>u.id===svId);if(!sv)return;
+  let m=(DB.members||[]).find(x=>x.code===code);if(!m)return;
+  let x=Object.assign({},m);x.groupId=sv.groupId;if(sv.year)x.grade=sv.year;
+  let i=DB.members.findIndex(y=>y.code===code);if(i>=0)DB.members[i]=x;
+  logActivity('توزيع '+m.name+' للخادم '+sv.name);
+  await saveDB({membersPatch:{upsert:[x]}});
+  closeModal();renderMembersPage();
+  toast('✓ '+m.name+' مع '+sv.name,'ok',true);
+}
+
+// ===== نظام طباعة التقارير =====
+function _printHTML(title,bodyHtml){
+  let w=window.open('','_print','width=800,height=600');
+  if(!w){toast('اسمح بالنوافذ المنبثقة للطباعة','warn',true);return;}
+  let church=(DB.churchName||'نظام الحضور الموحد');
+  let today=new Date().toLocaleDateString('ar-EG');
+  w.document.write(`<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="utf-8"><title>${title}</title>
+    <style>
+      *{font-family:'Segoe UI',Tahoma,Arial,sans-serif;box-sizing:border-box}
+      body{margin:22px;color:#1a1a2e}
+      .ph{text-align:center;border-bottom:2px solid #4f46e5;padding-bottom:10px;margin-bottom:14px}
+      .ph h1{margin:0;font-size:19px;color:#312e81}
+      .ph .sub{font-size:12px;color:#666;margin-top:3px}
+      table{width:100%;border-collapse:collapse;margin-top:8px;font-size:13px}
+      th,td{border:1px solid #cbd5e1;padding:6px 9px;text-align:right}
+      th{background:#eef2ff;color:#312e81;font-weight:700}
+      tr:nth-child(even){background:#f8fafc}
+      .present{color:#059669;font-weight:700}
+      .absent{color:#dc2626;font-weight:700}
+      .stat{display:inline-block;margin:0 10px;font-size:13px}
+      .stat b{font-size:17px;color:#312e81}
+      @media print{body{margin:0}.noprint{display:none}}
+      .pfoot{margin-top:16px;text-align:center;font-size:10px;color:#999;border-top:1px solid #e5e7eb;padding-top:8px}
+    </style></head><body>
+    <div class="ph"><h1>${church}</h1><div class="sub">${title} — ${today}</div></div>
+    ${bodyHtml}
+    <div class="pfoot">طُبع من نظام الحضور الموحد — ${today}</div>
+    <script>window.onload=function(){window.print();}<\/script>
+    </body></html>`);
+  w.document.close();
+}
+function _rows(recs){
+  return recs.map(r=>`<tr><td>${r.code||'—'}</td><td>${r.name}</td><td class="${r.status==='حاضر'?'present':'absent'}">${r.status}</td><td>${r.time||r.date||'—'}</td></tr>`).join('');
+}
+// طباعة تقرير اليوم — mode: present / absent / all
+function printToday(mode){
+  let tkey=todayKey();
+  let myMembers=getMyMembers();
+  let recs=(DB.records||[]).filter(r=>r.date===tkey&&myMembers.find(m=>m.code===r.code));
+  let title='تقرير اليوم';
+  if(mode==='present'){recs=recs.filter(r=>r.status==='حاضر');title='الحاضرون اليوم';}
+  else if(mode==='absent'){recs=recs.filter(r=>r.status==='غائب');title='الغائبون اليوم';}
+  else title='حضور وغياب اليوم';
+  let pr=recs.filter(r=>r.status==='حاضر').length,ab=recs.filter(r=>r.status==='غائب').length;
+  let body=`<div style="text-align:center;margin-bottom:10px">
+      <span class="stat">الإجمالي: <b>${recs.length}</b></span>
+      ${mode!=='absent'?`<span class="stat">حاضر: <b style="color:#059669">${pr}</b></span>`:''}
+      ${mode!=='present'?`<span class="stat">غائب: <b style="color:#dc2626">${ab}</b></span>`:''}
+    </div>
+    <table><thead><tr><th>الكود</th><th>الاسم</th><th>الحالة</th><th>الوقت</th></tr></thead>
+    <tbody>${recs.length?_rows(recs):'<tr><td colspan="4" style="text-align:center">لا يوجد</td></tr>'}</tbody></table>`;
+  _printHTML(title,body);
+}
+// طباعة تقرير الشهر
+function printMonthly(){
+  let now=new Date();
+  let firstDay=fmtDateKey(new Date(now.getFullYear(),now.getMonth(),1));
+  let myMembers=getMyMembers();
+  let monthRecs=(DB.records||[]).filter(r=>r.date>=firstDay&&myMembers.find(m=>m.code===r.code));
+  let days=[...new Set(monthRecs.map(r=>r.date))].sort();
+  let body=`<table><thead><tr><th>التاريخ</th><th>حاضر</th><th>غائب</th><th>%</th></tr></thead><tbody>${
+    days.map(d=>{let recs=monthRecs.filter(r=>r.date===d);let pr=recs.filter(r=>r.status==='حاضر').length;let ab=recs.filter(r=>r.status==='غائب').length;
+      return `<tr><td>${d}</td><td class="present">${pr}</td><td class="absent">${ab}</td><td>${pr+ab?Math.round(pr/(pr+ab)*100):0}%</td></tr>`;}).join('')
+    ||'<tr><td colspan="4" style="text-align:center">لا يوجد</td></tr>'}</tbody></table>`;
+  _printHTML('تقرير الشهر',body);
+}
+// طباعة الافتقاد
+function printFollowup(){
+  let myMembers=getMyMembers();
+  let myCodes=new Set(myMembers.map(m=>m.code));
+  let fu=(DB.followUps||[]).filter(f=>myCodes.has(f.code)).sort((a,b)=>b.ts-a.ts);
+  let body=`<table><thead><tr><th>التاريخ</th><th>العضو</th><th>النوع</th><th>النتيجة</th><th>بواسطة</th></tr></thead><tbody>${
+    fu.map(f=>{let m=(DB.members||[]).find(x=>x.code===f.code)||{name:f.code};
+      return `<tr><td>${new Date(f.ts).toLocaleDateString('ar-EG')}</td><td>${m.name}</td><td>${f.typ}</td><td>${f.note||'—'}</td><td>${f.by}</td></tr>`;}).join('')
+    ||'<tr><td colspan="5" style="text-align:center">لا يوجد</td></tr>'}</tbody></table>`;
+  _printHTML('تقرير الافتقاد',body);
+}
+// طباعة تنبيهات الغياب
+function printAlerts(){
+  let myMembers=getMyMembers();
+  let recMap={};
+  (DB.records||[]).forEach(r=>{if(myMembers.find(m=>m.code===r.code)){if(!recMap[r.code])recMap[r.code]=[];recMap[r.code].push(r);}});
+  Object.keys(recMap).forEach(c=>recMap[c].sort((a,b)=>b.date.localeCompare(a.date)));
+  let rows=[];
+  myMembers.forEach(m=>{let recs=recMap[m.code]||[];let cnt=0;for(let r of recs){if(r.status==='غائب')cnt++;else break;}if(cnt>=_alertThresh)rows.push({m,cnt});});
+  rows.sort((a,b)=>b.cnt-a.cnt);
+  let body=`<table><thead><tr><th>الاسم</th><th>الكود</th><th>الخادم</th><th>غياب متتالي</th></tr></thead><tbody>${
+    rows.map(x=>`<tr><td>${x.m.name}</td><td>${x.m.code}</td><td>${getGroupName(x.m.groupId)||'—'}</td><td class="absent">${x.cnt}</td></tr>`).join('')
+    ||'<tr><td colspan="4" style="text-align:center">لا يوجد غياب متتالي</td></tr>'}</tbody></table>`;
+  _printHTML('تنبيهات الغياب',body);
+}
+// طباعة بيوت محتاجة افتقاد (الأسر)
+function printFamVisit(){
+  let fam=getMembersPageList().filter(m=>m.isFamily);
+  let houses=familyHouses(fam);
+  let now=Date.now();
+  let rows=houses.map(h=>{
+    let codes=[h.main.code];if(h.spouse)codes.push(h.spouse.code);
+    let last=null;codes.forEach(cd=>{let f=(DB.followUps||[]).filter(x=>x.code===cd).sort((a,b)=>b.ts-a.ts)[0];if(f&&(!last||f.ts>last))last=f.ts;});
+    return{h,last,days:last?Math.floor((now-last)/86400000):null};
+  }).sort((a,b)=>(a.last||0)-(b.last||0));
+  let body=`<table><thead><tr><th>البيت</th><th>آخر افتقاد</th></tr></thead><tbody>${
+    rows.map(r=>{let nm=r.h.spouse?r.h.main.name+' و '+r.h.spouse.name:r.h.main.name;
+      return `<tr><td>${nm}</td><td>${r.last?'بقاله '+r.days+' يوم':'<span class="absent">لم يُفتقد نهائياً</span>'}</td></tr>`;}).join('')
+    ||'<tr><td colspan="2" style="text-align:center">لا يوجد</td></tr>'}</tbody></table>`;
+  _printHTML('بيوت محتاجة افتقاد',body);
+}
+// حقن أزرار الطباعة في التقارير حسب التاب المفتوح
+const _origSwitchRptTab_print=switchRptTab;
+switchRptTab=function(id){
+  _origSwitchRptTab_print(id);
+  let c=document.getElementById('rptContent');
+  if(!c)return;
+  let bar=document.createElement('div');
+  bar.className='noprint';
+  bar.style.cssText='display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px';
+  let btns='';
+  if(id==='rpt_today')btns=`
+    <button class="btn bg" style="font-size:11px" onclick="printToday('present')">🖨 طباعة الحاضرين</button>
+    <button class="btn br" style="font-size:11px" onclick="printToday('absent')">🖨 طباعة الغائبين</button>
+    <button class="btn bp" style="font-size:11px" onclick="printToday('all')">🖨 طباعة الكل</button>`;
+  else if(id==='rpt_monthly')btns=`<button class="btn bp" style="font-size:11px" onclick="printMonthly()">🖨 طباعة تقرير الشهر</button>`;
+  else if(id==='rpt_alerts')btns=`<button class="btn bp" style="font-size:11px" onclick="printAlerts()">🖨 طباعة تنبيهات الغياب</button>`;
+  else if(id==='rpt_followup')btns=`<button class="btn bp" style="font-size:11px" onclick="printFollowup()">🖨 طباعة الافتقاد</button>`;
+  else if(id==='rpt_famvisit')btns=`<button class="btn bp" style="font-size:11px" onclick="printFamVisit()">🖨 طباعة القائمة</button>`;
+  if(btns){bar.innerHTML=btns;if(c.firstChild)c.insertBefore(bar,c.firstChild);else c.appendChild(bar);}
+};
+
+// ===== حماية المسح الجماعي بكلمة سر خاصة =====
+// الكود مخزّن كهاش فقط — لتغييره: احسب هاش الكود الجديد بنفس الملح وضعه في DEL_HASH
+const DEL_SALT='del_v3::';
+const DEL_HASH='ad29d47551905dbc4c9b72201817dd6d960c8f738bc98e5e50f5df1378f596bd';
+async function _delHash(pw){
+  let buf=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(DEL_SALT+pw));
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+clearAllData=function(){
+  let box=document.getElementById('memberModalBox');
+  if(box)box.classList.remove('wide');
+  document.getElementById('memberModalBox').innerHTML=`
+    <div class="modal-title" style="color:var(--r)">🗑 مسح كل بيانات الحضور</div>
+    <div class="status-bar err" style="font-size:12px;margin-bottom:10px">⚠️ ده هيمسح كل سجلات الحضور نهائياً — عملية خطيرة ومحتاجة كلمة سر المسح</div>
+    <div class="field"><label>كلمة سر المسح</label><input type="password" id="del_pw" placeholder="كلمة السر الخاصة بالمسح"></div>
+    <div id="del_err" style="color:var(--r);font-size:11px;margin-bottom:8px"></div>
+    <div class="modal-btns">
+      <button class="btn br" onclick="confirmMassDelete()">🗑 تأكيد المسح</button>
+      <button class="btn bw" onclick="closeModal()">إلغاء</button>
+    </div>`;
+  document.getElementById('memberModal').classList.add('on');
+};
+async function confirmMassDelete(){
+  let pw=(getVal('del_pw')||'').trim();
+  let err=document.getElementById('del_err');
+  if(await _delHash(pw)!==DEL_HASH){err.textContent='كلمة سر المسح غلط';return;}
+  try{
+    let b=new Blob([JSON.stringify(DB,null,2)],{type:'application/json'});
+    let a=document.createElement('a');a.href=URL.createObjectURL(b);
+    a.download='backup_before_delete_'+todayKey()+'.json';a.click();
+  }catch(e){}
+  DB.records=[];DB.todayAtt={};DB.todayDate='';DB.closedGroups={};delete DB.closedDate;_localAtt={};
+  logActivity('⚠️ مسح كل بيانات الحضور (بكلمة سر المسح)');
+  await saveDB({skipArrMerge:true,skipAttMerge:true});
+  closeModal();renderCurrentPage();
+  toast('تم مسح بيانات الحضور','ok',true);
 }
 
 // ===== حذف عضو أسرة: يفك الربط عن الطرف التاني =====
